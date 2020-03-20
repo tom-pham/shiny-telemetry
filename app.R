@@ -18,7 +18,6 @@ library(slickR) # JS image carousel
 # library(shinycssloaders) # Fun loading animations
 library(waiter) # Loading animations
 library(httr) # Check HTTP status for CDEC/ERDDAP
-library(vroom)
 
 # Global ------------------------------------------------------------------
 
@@ -29,10 +28,9 @@ library(vroom)
 # VemcoReceiverDeployments <- sqlFetch(channel, "VemcoReceiverDeployments")
 # TaggedFish <- sqlFetch(channel, "TaggedFish")
 # odbcCloseAll()
-start <- Sys.time()
-ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
+ReceiverDeployments <- read_csv("./data/ReceiverDeployments.csv")
 ReceiverDeployments$year <- year(ReceiverDeployments$StartTime)
-ReceiverLocations <- vroom("./data/ReceiverLocations.csv")
+ReceiverLocations <- read_csv("./data/ReceiverLocations.csv")
 
 # Give Receiver Deployments a Water Year
 # The timespan between October 1 and September 30 of the next year
@@ -40,7 +38,7 @@ ReceiverDeployments$water_year <- ifelse(month(ReceiverDeployments$StartTime) <=
                                          year(ReceiverDeployments$StartTime) + 1)
 
 
-VemcoReceiverDeployments <- vroom("./data/VemcoReceiverDeployments.csv") %>%
+VemcoReceiverDeployments <- read_csv("./data/VemcoReceiverDeployments.csv") %>%
   left_join(ReceiverLocations %>% select(GPSname, LatShore = GenLat, LonShore = GenLon)) %>%
   mutate(
     water_year = ifelse(month(StartTime) <= 9, year(StartTime),
@@ -62,7 +60,7 @@ VemcoReceiverDeployments <- vroom("./data/VemcoReceiverDeployments.csv") %>%
 #   left_join(ReceiverLocations %>% select(GPSname, GenLat, GenLon))
 
 ##### Vemco attempt 2
-ReceiverLocations <- vroom("./data/ReceiverLocations.csv")
+ReceiverLocations <- read_csv("./data/ReceiverLocations.csv")
 VemcoReceiverDeployments %>%
   left_join(ReceiverLocations %>% select(GPSname, LatShore = GenLat, LonShore = GenLon))
 
@@ -77,7 +75,7 @@ VemcoReceiverDeployments$uid <- 1:nrow(VemcoReceiverDeployments)
 # Hydrology
 
 # Gather flow data from CDEC, save to file to reduce calls to CDEC which is intermittently down
-comb_flow <- vroom("./data/comb_flow.csv")
+comb_flow <- read_csv("./data/comb_flow.csv")
 
 # Update file with new flow data if it has been over 30 days since last download
 if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
@@ -112,13 +110,18 @@ if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
   comb_flow <- do.call(cbind, flows)
   names(comb_flow) <- gauges
   
-  write.zoo(comb_flow, "./data/comb_flow.csv", sep=",")
+  # Convert XTS to dataframe and add the Index as a column which is date
+  # Step necessary because write.zoo doesn't allow overwrites
+  comb_flow2 <- as.data.frame(comb_flow) %>% 
+    rownames_to_column("Index")
+  
+  write_csv(comb_flow2, "./data/comb_flow.csv")
   
 }else {
   comb_flow <- as.xts(read.csv.zoo("./data/comb_flow.csv"))
 }
 
-cdec_stations <- vroom("./data/cdec_stations.csv")
+cdec_stations <- read_csv("./data/cdec_stations.csv")
 
 ## Get list of studyIDs from ERDDAP
 my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
@@ -144,8 +147,6 @@ if ( day(Sys.Date()) == 1 |  day(Sys.Date()) == 15) {
 }else {
   studyid_list <- readRDS("studyid_list.RDS")
 }
-
-end <- Sys.time()
 
 
 
@@ -181,7 +182,11 @@ ui <- fluidPage(theme = shinytheme("flatly"),
              ),
              tabPanel("Hydrology",
                       box(dygraphOutput("dygraph", width = "100%")),
-                      box(leafletOutput("hydromap", width = "75%"))
+                      box(leafletOutput("hydromap", width = "75%")),
+                      textOutput("text1"),
+                      textOutput("text2"),
+                      textOutput("text3"),
+                      downloadButton("downloadData", "Download")
 
              ),
              tabPanel("Time Series Animation",
@@ -302,18 +307,25 @@ server <- function(input, output, session) {
 
   # Background --------------------------------------------------------------
   output$background <- renderUI({
-    waitress$start(h3("Loading Stuff..."))
+    waitress$start(h3("Loading..."))
     withTags({
       div(class="header", checked=NA,
           h1("Background"),
-          p("Insert text here"),
+          p("Since 2012, we have been tagging juvenile salmon using JSATS (Juvenile 
+            Salmon Acoustic Telemetry System) technology to track their movement and 
+            survival over 500 river kilometers to the Pacific Ocean. Acoustic tags are 
+            implanted into the peritoneal cavity of the study fish and closed with sutures. 
+            After being released, tagged fish are presumed to exhibit a strictly downstream 
+            movement, while being detected by underwater hydrophones located throughout the 
+            riverine and estuary environments. Survival estimates are calculated by assuming 
+            a fish has died when it is not detected at downstream receivers."),
           br(),
           h3("Receiver Deployments"),
           p("A map of all the receivers that were deployed by water year which
             is defined as the 12 month period beginning October 1 to September 30
             of the following calendar year i.e. water year 2017 spans 10/1/17-9/30/18.
             It is filtered by receiver type: autonomous (in-house customized 
-            ATS Trident receiver), Real-time (ATS SR3017, Tekno), and Vemco (VR2W, VR2AR)."),
+            ATS Trident receivers), Real-time (ATS SR3017, Tekno), and Vemco (VR2W, VR2AR)."),
           br(),
           h3("Hydrology"),
           p("The hydrology tab shows an interactive graph of Sacramento River flows (cubic feet per second) 
@@ -565,6 +577,40 @@ server <- function(input, output, session) {
         options = layersControlOptions(collapsed = FALSE)
       )
   })
+  
+  output$text1 <- renderText("Click the button below to download the hydrology data,
+                             in CSV, currently in view based on the date range selector.")
+  output$text2 <- renderText(paste0("Start Date: ", as.Date(ymd_hms(input$dygraph_date_window[[1]]))))
+  output$text3 <- renderText(paste0("End Date: ", as.Date(ymd_hms(input$dygraph_date_window[[2]]))))
+  
+  
+  # Reactive value of hydrology data based on date range selection
+  hydroDataset <- reactive({
+    start_date <- as.Date(ymd_hms(input$dygraph_date_window[[1]]))
+    end_date <- as.Date(ymd_hms(input$dygraph_date_window[[2]]))
+    
+    # First convert comb_flow xts to a dataframe and extract index from rowname into a 
+    # column
+    comb_flow_subset <- data.frame(date=index(comb_flow), coredata(comb_flow))
+    
+    # Filter the data based on date range selection values
+    comb_flow_subset %>% 
+      filter(
+        date >= start_date,
+        date <= end_date
+      )
+  })
+  
+  output$downloadData <- downloadHandler(
+    filename = function() {
+      start_date <- as.Date(ymd_hms(input$dygraph_date_window[[1]]))
+      end_date <- as.Date(ymd_hms(input$dygraph_date_window[[2]]))
+      paste(start_date, "_", end_date, ".csv", sep = "")
+    },
+    content = function(file) {
+      write.csv(hydroDataset(), file, row.names = FALSE)
+    }
+  )
   
 
   # Time Series Animation  --------------------------------------------------
@@ -1026,6 +1072,7 @@ server <- function(input, output, session) {
         group_by(study_id) %>% 
         summarise(
           count = n_distinct(fish_id),
+          n_to_i80 = sum(str_detect(receiver_general_location, "I80-50")),
           n_to_benicia = sum(str_detect(receiver_general_location, "Benicia")),
           n_survivor = sum(receiver_general_location %in% c("GoldenGateE", "GoldenGateW")),
           Length = mean(fish_length),
@@ -1035,22 +1082,19 @@ server <- function(input, output, session) {
         ungroup() %>% 
         gt(rowname_col = "study_id") %>% 
         tab_header(
-          title = "Survival Summary"
+          title = "Minimum Survival Summary"
         ) %>% 
         tab_stubhead(label = md("**Study Group**")) %>% # md() wrapper allows text styling with MarkDown
         tab_footnote(
-          footnote = "Number of fish detected at Golden Gate",
-          cells_column_labels(columns = 3)
-        ) %>% 
-        tab_footnote(
           footnote = "Mean values",
-          cells_column_labels(columns = c(4, 5, 6))
+          cells_column_labels(columns = c(5, 6, 7))
         ) %>% 
         cols_label(
           count = "Fish Tagged",
           Condition = "K Factor",
-          n_to_benicia = "Detected at Benicia",
-          n_survivor = "Survived to GG"
+          n_to_i80 = "Fish detected at I-80 Bridge",
+          n_to_benicia = "Fish detected at Benicia",
+          n_survivor = "Fish detected at Golden Gate"
         ) %>% 
         fmt_number(
           columns = vars(Length, Weight, Condition),
@@ -1069,7 +1113,7 @@ server <- function(input, output, session) {
     name <- input$cumsurvival_datasets
     
     file <- list.files("./Cumulative Survival/outputs", name, full.names = T)
-    vroom(file)
+    read_csv(file)
   })
   
   output$plotly_survival_output <- renderPlotly({

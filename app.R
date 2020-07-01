@@ -15,64 +15,166 @@ library(arsenal) # nice summary stats tables
 library(gt) # fancy tables
 library(rerddap) # ERDDAP data retrievals
 library(slickR) # JS image carousel
-# library(shinycssloaders) # Fun loading animations
 library(waiter) # Loading animations
 library(httr) # Check HTTP status for CDEC/ERDDAP
 
 # Global ------------------------------------------------------------------
 
-# library(RODBC)
-# channel <- odbcDriverConnect("Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=W:/JSATS/JSATS_Database.accdb")
-# ReceiverDeployments <- sqlFetch(channel, "ReceiverDeployments")
-# ReceiverLocations <- sqlFetch(channel, "ReceiverLocations")
-# VemcoReceiverDeployments <- sqlFetch(channel, "VemcoReceiverDeployments")
-# TaggedFish <- sqlFetch(channel, "TaggedFish")
-# odbcCloseAll()
-ReceiverDeployments <- read_csv("./data/ReceiverDeployments.csv")
-ReceiverDeployments$year <- year(ReceiverDeployments$StartTime)
-ReceiverLocations <- read_csv("./data/ReceiverLocations.csv")
+## Download data from ERDAPP - ReceiverDeployments
+my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+JSATSinfo <- info('FED_JSATS_receivers', url = my_url)
 
-# Give Receiver Deployments a Water Year
-# The timespan between October 1 and September 30 of the next year
-ReceiverDeployments$water_year <- ifelse(month(ReceiverDeployments$StartTime) <= 9, year(ReceiverDeployments$StartTime),
-                                         year(ReceiverDeployments$StartTime) + 1)
+# Save latest table to file, if ERDDAP is down use last saved file 
+if (http_error("oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_receivers.html") == FALSE) {
+  ReceiverDeployments <- tabledap(JSATSinfo, url = my_url)  
+  
+  # Fix column names and correct column types
+  ReceiverDeployments <- ReceiverDeployments %>% 
+    rename(
+      SN = receiver_serial_number,
+      GEN = receiver_general_location,
+      Region = receiver_region,
+      GPSname = receiver_location,
+      LAT = latitude,
+      LON = longitude,
+      RKM = receiver_river_km,
+      GenLat = receiver_general_latitude,
+      GenLon = receiver_general_longitude,
+      GenRKM = receiver_general_river_km,
+      RecMake = receiver_make,
+      StartTime = receiver_start,
+      EndTime = receiver_end
+    ) %>% 
+    mutate_at(vars(SN, LAT, LON, RKM, GenLat, GenLon, GenRKM), as.numeric) %>% 
+    mutate(
+      StartTime = mdy_hm(StartTime),
+      EndTime = mdy_hm(EndTime),
+      water_year = ifelse(month(StartTime) <= 9, year(StartTime),
+                          year(StartTime) + 1)
+    )
 
+  
+  # Save latest update to file
+  write_csv(ReceiverDeployments, "./data/ReceiverDeployments.csv")
+} else {
+  ReceiverDeployments <- read_csv("./data/ReceiverDeployments.csv")
+}
 
 VemcoReceiverDeployments <- read_csv("./data/VemcoReceiverDeployments.csv") %>%
-  left_join(ReceiverLocations %>% select(GPSname, LatShore = GenLat, LonShore = GenLon)) %>%
+  left_join(ReceiverDeployments %>% 
+              select(GPSname, LAT, LON) %>% 
+              distinct()) %>%
   mutate(
     water_year = ifelse(month(StartTime) <= 9, year(StartTime),
                         year(StartTime) + 1)
   )
 
-##### Vemco attempt 1
-# VemcoReceiverDeployments <- read_csv("./data/VemcoReceiverDeployments.csv") %>%
-#   mutate(startDate = as.Date(StartTime)) %>%
-#   left_join(ReceiverDeployments %>%
-#               select(VemcoSN, StartTime, LatShore, LonShore, year) %>%
-#               mutate(startDate = as.Date(StartTime)),
-#             by = c("VemcoSN", "startDate")
-#               )
-# 
-# # If it's not possible to get actual Lat/Lons from receiver deployments then just use ReceiverLocations
-# ReceiverLocations <- read_csv("./data/ReceiverLocations.csv")
-# VemcoReceiverDeployments[is.na(VemcoReceiverDeployments$LatShore),] %>%
-#   left_join(ReceiverLocations %>% select(GPSname, GenLat, GenLon))
-
-##### Vemco attempt 2
-ReceiverLocations <- read_csv("./data/ReceiverLocations.csv")
-VemcoReceiverDeployments %>%
-  left_join(ReceiverLocations %>% select(GPSname, LatShore = GenLat, LonShore = GenLon))
-
-
-# TaggedFish <- read_csv("./data/TaggedFish.csv")
-# TaggedFish$surgery_time <- TaggedFish$Time_out_anac - TaggedFish$Time_in_ana
-
 # Assigns ReceiverDeployments an ID to be able to be identifiable when clicked
 ReceiverDeployments$uid <- 1:nrow(ReceiverDeployments)
 VemcoReceiverDeployments$uid <- 1:nrow(VemcoReceiverDeployments)
 
-# Hydrology
+
+## Download data from ERDAPP - TaggedFish
+my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
+
+# Save latest table to file, if ERDDAP is down use last saved file 
+if (http_error("oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_taggedfish.html") == FALSE) {
+  TaggedFish <- tabledap(JSATSinfo, url = my_url)  
+  
+  # Fix column names and correct column types
+  TaggedFish <- TaggedFish %>% 
+    mutate_at(vars(tag_weight, tag_pulse_rate_interval_nominal, tag_warranty_life,
+                   fish_length, fish_weight, release_latitude, release_longitude,
+                   release_river_km), as.numeric) 
+
+  # Save latest update to file
+  write_csv(TaggedFish, "./data/TaggedFish.csv")
+} else {
+  TaggedFish <- read_csv("./data/TaggedFish.csv")
+}
+
+## Download data from ERDAPP - Detections
+my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+JSATSinfo <- info('FED_JSATS_detects', url = my_url)
+
+# Retrieve list of valid studyIDs in ERDDAP but first check if site is down
+#If ERDDAP is not down retrieve list of studyIDs and save to file
+if (http_error("https://oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_detects.html") == FALSE) {
+  studyid_list <- tabledap(JSATSinfo,
+                           fields = c('study_id'),
+                           url = my_url,
+                           distinct = TRUE
+  ) %>%
+    filter(study_id != "2017_BeaconTag") %>%
+    pull(study_id)
+
+  # If any of the currently observed studyIDs is not in the saved file, rewrite it with the new
+  # StudyIDs
+  saved_studyid_list <- readRDS("studyid_list.RDS")
+  if (any(studyid_list != saved_studyid_list)) {
+    saveRDS(studyid_list, file = "studyid_list.RDS")
+    #########
+    ####  INCLUDE SOMETHING HERE THAT WILL ALERT THAT A NEW STUDYID IS ONLINE
+    #########
+  }
+}else {
+  studyid_list <- readRDS("studyid_list.RDS")
+}
+
+#### List of studyIDs relevant to the project and selectable in the app
+#### Update this list as needed to allow for additional studyIDs to be selected
+studyid_list <- c("BC_Jumpstart_2019", "CNFH_FMR_2019", "ColemanFall_2012", "ColemanFall_2013",
+                  "ColemanFall_2016", "ColemanFall_2017", "ColemanLateFall_2018", "ColemanLateFall_2019",
+                  "ColemanLateFall_2020", "DeerCk_SH_Wild_2018", "DeerCk_Wild 2019", "DeerCk_Wild_2017",
+                  "DeerCk_Wild_2018", "FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", "FR_Spring_2019",
+                  "MillCk_SH_Wild_2015", "MillCk_SH_Wild_2016", "MillCk_Wild 2019", "MillCk_Wild_2013",
+                  "MillCk_Wild_2014", "MillCk_Wild_2015", "MillCk_Wild_2016", "MillCk_Wild_2016_DS",
+                  "MillCk_Wild_2017", "MillCk_Wild_2018", "Nimbus_Fall_2016", "Nimbus_Fall_2017",
+                  "Nimbus_Fall_2018", "RBDD_2017", "RBDD_2018", "SB_Spring_2015", "SB_Spring_2016",
+                  "SB_Spring_2017", "SB_Spring_2018", "SB_Spring_2019", "Winter_H_2013", "Winter_H_2014",
+                  "Winter_H_2015", "Winter_H_2016", "Winter_H_2017", "Winter_H_2018", "Winter_H_2019")
+
+# Check to see that there is a detection file for each studyID in the studyid_list, if not
+# download it into the data folder
+check_detects_downloaded <- function(studyID) {
+  # Detection files are named by studyID now get vector of file studyID names without extension
+  files <- unlist(strsplit(list.files("./data/detections"), ".csv"))
+  
+  # Look at the files in the detections folder, see if there is a match between the StudyID name
+  # and the list of file names, if there is not download that studyID and put into the folder
+  if (!(studyID %in% files)) {
+    JSATSinfo <- info('FED_JSATS_detects', url = my_url)
+    
+    detects_fields <- c('study_id', 'fish_id', 'time', 'receiver_general_location', 
+                        'receiver_serial_number', 'latitude', 'longitude')
+    
+    detections <- tabledap(JSATSinfo,
+                           fields = detects_fields,
+                           paste0('study_id=', '"',studyID, '"'),
+                           url = my_url,
+                           distinct = TRUE) %>% 
+      mutate(time = ymd_hms(time)) %>% 
+      rename(
+        studyID = study_id,
+        FishID = fish_id,
+        GEN = receiver_general_location,
+        SN = receiver_serial_number,
+        LAT = latitude,
+        LON = longitude
+      ) %>% 
+      left_join(ReceiverDeployments %>% 
+                  select(GEN, Region, GenLat, GenLon, GenRKM) %>% 
+                  distinct(), by = "GEN")
+    
+    file_path <- paste0("./data/detections/", studyID, ".csv")
+    write_csv(detections, file_path)
+  }
+}
+
+lapply(studyid_list, check_detects_downloaded)
+
+## Hydrology
 
 # Gather flow data from CDEC, save to file to reduce calls to CDEC which is intermittently down
 comb_flow <- read_csv("./data/comb_flow.csv")
@@ -123,33 +225,6 @@ if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
 
 cdec_stations <- read_csv("./data/cdec_stations.csv")
 
-## Get list of studyIDs from ERDDAP
-my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-JSATSinfo <- info('FED_JSATS', url = my_url)
-
-# Retrieve list of valid studyIDs in ERDDAP but first check if site is down
-### Store the list and update as needed, only check twice a month since it doesn't change that often
-if ( day(Sys.Date()) == 1 |  day(Sys.Date()) == 15) {
-  # If ERDDAP is not down retrieve list of studyIDs and save to file
-  if (http_error("https://oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS.html") == FALSE) {
-    studyid_list <- tabledap(JSATSinfo,
-                             fields = c('study_id'),
-                             url = my_url,
-                             distinct = TRUE
-    ) %>% 
-      filter(study_id != "2017_BeaconTag") %>% 
-      pull(study_id)
-    
-    saveRDS(studyid_list, file = "studyid_list.RDS")
-  }else {
-    studyid_list <- readRDS("studyid_list.RDS")
-  }
-}else {
-  studyid_list <- readRDS("studyid_list.RDS")
-}
-
-
-
 # UI ----------------------------------------------------------------------
 
 ui <- fluidPage(theme = shinytheme("flatly"),
@@ -171,7 +246,11 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                           selectInput("water_year",
                                       "Water Year:",
                                       ""),
-                          helpText("Note: water year is defined as the 12 month period starting October 1 to September 30 of the following calendar year."),
+                          helpText("Note: water year is defined as the 12 month period starting 
+                                   October 1 to September 30 of the following calendar year. 
+                                   The water year is designated by the calendar year in which 
+                                   it ends and which includes 9 of the 12 months. Thus, the year
+                                   ending September 30, 1999 is called the 1999 water year."),
                           htmlOutput("map_marker_click"),
                           tableOutput("receiver_table")
                         ),
@@ -189,11 +268,11 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                       downloadButton("downloadData", "Download")
 
              ),
-             tabPanel("Time Series Animation",
+             tabPanel("Outmigration Animation",
                       sidebarLayout(
                         sidebarPanel(
                           selectInput("anim_dataset", "Choose a study population",
-                                      # choices = strsplit(list.files("./data/Timestep"), ".csv")),
+                                      #choices = strsplit(list.files("./data/Timestep"), ".csv")),
                                       choices = studyid_list),
                           helpText("This tool visualizes study group detection data into an animated time series",
                                    "of fish outmigration. Unique fish detections are identified at each general",
@@ -209,14 +288,6 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                       headerPanel("Select Options"),
                       sidebarPanel(
                         selectInput("data_explorer_datasets", "Study Populations",
-                                    # choices = TaggedFish %>% # Use this once ERDDAP back up studyid_list
-                                    #   select(StudyID) %>%
-                                    #   distinct() %>%
-                                    #   filter(StudyID != "2017_BeaconTag") %>%
-                                    #   arrange(StudyID) %>%
-                                    #   pull(StudyID), 
-                                    # multiple = TRUE,
-                                    # selectize = TRUE),
                                     choices = studyid_list,
                                     multiple = TRUE,
                                     selectize = TRUE),
@@ -240,11 +311,6 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                       headerPanel("Select Options"),
                       mainPanel(
                         selectInput("time_of_day_input", "Choose a study population",
-                                    # This line is crazy but what it does is apply each studyID to str_detects 
-                                    # (partial string match), string being the list of files in detections folder 
-                                    # then applys any() to collapse the vector of logicals into a single TRUE or FALSE
-                                    # then it subsets the original list of StudyIDs using that vector logical index
-                                    # choices = sort(unique(TaggedFish$StudyID)[sapply(lapply(unique(TaggedFish$StudyID), str_detect, string = list.files("./data/detections")), any)]) 
                                     choices = studyid_list
                                     ),
                         radioButtons("time_of_day_radio", "Choose all detections or by receiver GEN",
@@ -261,16 +327,10 @@ ui <- fluidPage(theme = shinytheme("flatly"),
              ),
              tabPanel("Survival",
                       tabsetPanel(
-                        tabPanel("Raw Survival",
+                        tabPanel("Unique Detections",
                                  headerPanel("Select Options"),
                                  sidebarPanel(
                                    selectInput("survival_datasets", "Study Populations",
-                                               # choices = TaggedFish %>% # Use this once ERDDAP back up studyid_list
-                                               #   select(StudyID) %>%
-                                               #   distinct() %>%
-                                               #   filter(StudyID != "2017_BeaconTag") %>%
-                                               #   arrange(StudyID) %>%
-                                               #   pull(StudyID)
                                                choices = studyid_list,
                                                selectize = T,
                                                multiple = T)
@@ -278,17 +338,33 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                  mainPanel(
                                    gt_output("gt_output")
                                  )
-                        ),
-                        tabPanel("Estimated Survival",
-                                 headerPanel("Select Options"),
-                                 sidebarPanel(
-                                   selectInput("cumsurvival_datasets", "Study Group",
-                                               choices = c("Coleman Fall", "Deer Creek", "Mill Creek",
-                                                           "RBDD", "Sutter Bypass", "Winter"))
-                                 ),
-                                 mainPanel(
-                                   plotlyOutput("plotly_survival_output")
-                                 )
+                        )
+                        # ,
+                        # tabPanel("Estimated Survival",
+                        #          headerPanel("Select Options"),
+                        #          sidebarPanel(
+                        #            selectInput("cumsurvival_datasets", "Study Group",
+                        #                        ### These need to be manually updated
+                        #                        choices = c("Coleman Fall", "Deer Creek", "Mill Creek",
+                        #                                    "RBDD", "Sutter Bypass", "Winter"))
+                        #          ),
+                        #          mainPanel(
+                        #            plotlyOutput("plotly_survival_output")
+                        #          )
+                        # )
+                      )
+             ),
+             tabPanel("Movement",
+                      headerPanel("Select Options"),
+                      sidebarPanel(
+                        selectInput(
+                          "movement_dataset", "Choose a study population",
+                          choices = studyid_list
+                        )
+                      ),
+                      mainPanel(
+                        gt_output(
+                          "movement_gt"
                         )
                       )
              )
@@ -336,8 +412,8 @@ server <- function(input, output, session) {
             a(href="https://cdec.water.ca.gov/dynamicapp/staMeta?station_id=WLK", "WLK"), " (Wilkins Slough).
             This plot was created using the R package ", a(href="https://rstudio.github.io/dygraphs/", "dygraphs"),"."),
           br(),
-          h3("Time Series Animation"),
-          p("The time series animation tab visualizes fish outmigration using detection data over time.
+          h3("Outmigration Animation"),
+          p("The Outmigration Animation tab visualizes fish outmigration using detection data over time.
             What is represented is unique fish detections at each receiver location by day. This animation
             was created using the R packages ", a(href="https://rstudio.github.io/leaflet/", "leaflet"),
             "and leaflet.extras."),
@@ -438,7 +514,7 @@ server <- function(input, output, session) {
       # Set the default view
       setView(-122.159729,39.119407, 7) %>% 
       # Display receiver deploments as circle markers
-      addCircleMarkers(~LonShore, ~LatShore, 
+      addCircleMarkers(~LON, ~LAT, 
                        popup = paste("GPSname: ", receivers$GPSname),
                        layerId = ~uid,
                        radius = 3,
@@ -578,6 +654,7 @@ server <- function(input, output, session) {
       )
   })
   
+  # Explanatory text for the download button
   output$text1 <- renderText("Click the button below to download the hydrology data,
                              in CSV, currently in view based on the date range selector.")
   output$text2 <- renderText(paste0("Start Date: ", as.Date(ymd_hms(input$dygraph_date_window[[1]]))))
@@ -601,6 +678,8 @@ server <- function(input, output, session) {
       )
   })
   
+  # Adds download button and allows user to download csv of the hydrology data
+  # Currently in, view filtered by user's date range selected
   output$downloadData <- downloadHandler(
     filename = function() {
       start_date <- as.Date(ymd_hms(input$dygraph_date_window[[1]]))
@@ -613,43 +692,40 @@ server <- function(input, output, session) {
   )
   
 
-  # Time Series Animation  --------------------------------------------------
+  # Outmigration Animation  --------------------------------------------------
 
   # Reactive expression that retrieves detections from ERDDAP and formats it for 
   # the time step animation
   timestepVar<-  reactive({
     req(input$anim_dataset)
     
-    # Basic set up for RERDDAP 
-    my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-    JSATSinfo <- info('FED_JSATS', url = my_url)
+    files <- list.files("./data/detections/", full.names = T)
     
-    detections <- tabledap(JSATSinfo,
-             fields = c('fish_id', 'time', 'receiver_general_location', 
-                        'receiver_general_river_km', 'receiver_general_latitude', 
-                        'receiver_general_longitude'),
-             paste0('study_id=', '"',input$anim_dataset, '"'),
-             url = my_url,
-             distinct = T
-    )
+    # Choose the file that matches the studyID and read it in
+    file <- files[str_detect(files, input$anim_dataset)]
+    detections <- read_csv(file)
+    
+    # Get release info from TaggedFish
+    release <- TaggedFish %>% 
+      filter(study_id == input$anim_dataset) %>% 
+      select(release_latitude, release_longitude, release_river_km) %>% 
+      distinct()
     
     detections <- detections %>% 
       mutate(
-        receiver_general_river_km = as.numeric(receiver_general_river_km),
-        receiver_general_latitude = as.numeric(receiver_general_latitude),
-        receiver_general_longitude = as.numeric(receiver_general_longitude),
-        time = ymd_hms(time),
-        date = as.Date(time)
+        date = as.Date(time),
+        GenLat = ifelse(SN == 1, LAT, GenLat),
+        GenLon = ifelse(SN == 1, LON, GenLon),
+        GenRKM = ifelse(SN == 1, release$release_river_km, GenRKM)
       )
     
-    # Get the list of unique receiver locations for the study group
+    # Get the list of unique receiver general locations for the study group
     receiver_loc <- detections %>% 
-      select(GEN = receiver_general_location, GenRKM = receiver_general_river_km,
-             GenLat = receiver_general_latitude, GenLon = receiver_general_longitude) %>% 
+      select(GEN, GenRKM, GenLat, GenLon) %>% 
       arrange(desc(GenRKM)) %>% 
       distinct()
     
-    # Create a grid of all receiver locations by all dates from the earliest detection date to the 
+    # Create a grid of all receiver general locations by all dates from the earliest detection date to the 
     # latest detection date
     timestep <- expand.grid(receiver_loc$GEN, seq(min(detections$date), max(detections$date), by = 1),
                             stringsAsFactors = F)
@@ -658,7 +734,7 @@ server <- function(input, output, session) {
     # Summarise detections counts by GEN and date and join into the grid
     timestep <- timestep %>% 
       left_join(detections %>% 
-                  select(FishID = fish_id, GEN = receiver_general_location, date) %>% 
+                  select(FishID, GEN, date) %>% 
                   distinct() %>% 
                   group_by(GEN, date) %>% 
                   summarise(num_fish = n()), by = c('GEN', 'date')
@@ -671,7 +747,7 @@ server <- function(input, output, session) {
                 by = 'GEN')
   })
   
-  # Output leaflet time series animation of fish outmigration
+  # Output leaflet Outmigration Animation of fish outmigration
   # Takes data that has been pre-processed, and visualizes magnitude of unique detections by day at every receiver location
   # Achieved by using addMinicharts which takes a time argument
   output$timemap <- renderLeaflet({
@@ -699,16 +775,7 @@ server <- function(input, output, session) {
 
   # Data Explorer  --------------------------------------------------
   
-  # Reactive function that filters subset of tagged fish metadata based
-  # on user input. Useful b/c used in multiple render functions.
-  # tagged_fish_filtered <- reactive({
-  #   # Anything that depends on tagged_fish_filtered will only render if input was received
-  #   req(input$data_explorer_datasets)
-  #   
-  #   TaggedFish %>%
-  #     filter(StudyID %in% input$data_explorer_datasets)
-  # })
-  
+  # Reactive function that returns the filtered TaggedFish table by selected studyID
   taggedfishVar <-  reactive({
     req(input$data_explorer_datasets)
     
@@ -717,34 +784,42 @@ server <- function(input, output, session) {
     # List of studyIDs to query for
     studyids <- input$data_explorer_datasets
     
-    # Basic set up for RERDDAP 
-    my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-    JSATSinfo <- info('FED_JSATS', url = my_url)
-    
-    # Function that accepts a studyid and calls tabledap, allows repeated calls since
-    # You can not simply do an %in% query
-    get_erddap <- function(studyid) {
-      tabledap(JSATSinfo,
-               fields = c('study_id', 'fish_id', 'receiver_general_location', 
-                          'receiver_general_river_km', 'fish_length', 'fish_weight'),
-               paste0('study_id=', '"',studyid, '"'),
-               url = my_url,
-               distinct = T
-      )
-    }
-    
-    # Retreive ERDDAP data with list of user selected studyIDs, bind together and get distinct rows
-    lapply(studyids, get_erddap) %>% 
-      bind_rows() %>% 
+    # Filter TaggedFish by studyID's
+    TaggedFish %>% 
+      filter(study_id %in% studyids) %>% 
       rename(
         StudyID = study_id,
         FishID = fish_id,
-        GEN = receiver_general_location,
-        GenRKM = receiver_general_river_km,
         Length = fish_length,
         Weight = fish_weight
-      ) %>% 
-      mutate_at(vars(GenRKM, Length, Weight), as.numeric)
+      )
+    
+    # # Basic set up for RERDDAP 
+    # my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+    # JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
+    # 
+    # # Function that accepts a studyid and calls tabledap, allows repeated calls since
+    # # You can not simply do an %in% query
+    # get_erddap <- function(studyid) {
+    #   tabledap(JSATSinfo,
+    #            fields = c('study_id', 'fish_id',
+    #                       'fish_length', 'fish_weight'),
+    #            paste0('study_id=', '"',studyid, '"'),
+    #            url = my_url,
+    #            distinct = T
+    #   ) 
+    # }
+    # 
+    # # Retreive ERDDAP data with list of user selected studyIDs, bind together and get distinct rows
+    # lapply(studyids, get_erddap) %>% 
+    #   bind_rows() %>% 
+    #   rename(
+    #     StudyID = study_id,
+    #     FishID = fish_id,
+    #     Length = fish_length,
+    #     Weight = fish_weight
+    #   ) %>% 
+    #   mutate_at(vars(Length, Weight), as.numeric)
     
   })
   
@@ -833,32 +908,49 @@ server <- function(input, output, session) {
     
     waiter$show()
     
-    start <- Sys.time()
-    # Basic set up for RERDDAP 
-    my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-    JSATSinfo <- info('FED_JSATS', url = my_url)
+    # Directory of detection files
+    files <- list.files("./data/detections/", full.names = T)
     
-    detections <- tabledap(JSATSinfo,
-                           fields = c('fish_id', 'time', 'receiver_general_location', 'receiver_river_km',
-                                      'receiver_general_latitude', 'receiver_general_longitude'),
-                           paste0('study_id=', '"',input$time_of_day_input, '"'),
-                           url = my_url,
-                           distinct = T
-    ) %>% 
-      mutate(
-        time = ymd_hms(time),
-        hour = hour(time)
-        ) %>% 
-      rename(
-        GEN = receiver_general_location,
-        FishID = fish_id,
-        LAT = receiver_general_latitude,
-        LON = receiver_general_longitude,
-        GenRKM = receiver_river_km 
-      ) %>% 
-      mutate_at(
-        vars(LAT, LON, GenRKM), as.numeric
-      )
+    # Function to read in appropriate csv by given studyID
+    read_detects_files <- function(studyID) {
+      file <- files[str_detect(files, studyID)]
+      detections <- read_csv(file)
+    }
+    
+    # Read all studyID CSVs from input and bind together
+    detections <- lapply(input$time_of_day_input, read_detects_files) %>% 
+      bind_rows() %>% 
+      mutate(hour = hour(time))
+    
+    
+    # # Basic set up for RERDDAP 
+    # my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+    # JSATSinfo <- info('FED_JSATS_detects', url = my_url)
+    # 
+    # detections <- tabledap(JSATSinfo,
+    #                        fields = c('fish_id', 'time', 'receiver_general_location', 
+    #                                   'receiver_river_km'),
+    #                        paste0('study_id=', '"',input$time_of_day_input, '"'),
+    #                        url = my_url,
+    #                        distinct = T
+    # ) %>% 
+    #   left_join(
+    #     ReceiverDeployments %>% 
+    #       select(GEN, GenLat, GenLon) %>% 
+    #       distinct(), by = c("receiver_general_location" = "GEN")
+    #   ) %>% 
+    #   mutate(
+    #     time = ymd_hms(time),
+    #     hour = hour(time)
+    #     ) %>% 
+    #   rename(
+    #     GEN = receiver_general_location,
+    #     FishID = fish_id,
+    #     GenRKM = receiver_river_km 
+    #   ) %>% 
+    #   mutate(
+    #     GenRKM = as.numeric(GenRKM)
+    #   )
   })
 
   output$time_of_day_plot <- renderPlotly({
@@ -1040,46 +1132,90 @@ server <- function(input, output, session) {
     # List of studyIDs to query for
     studyids <- input$survival_datasets
     
-    # Basic set up for RERDDAP 
-    my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-    JSATSinfo <- info('FED_JSATS', url = my_url)
+    # Directory of detection files
+    files <- list.files("./data/detections/", full.names = T)
     
-    # Function that accepts a studyid and calls tabledap, allows repeated calls since
-    # You can not simply do an %in% query
-    get_erddap <- function(studyid) {
-      tabledap(JSATSinfo,
-               fields = c('study_id',  'fish_id', 'fish_length', 'fish_weight', 
-                          'receiver_general_location', 'receiver_region'),
-               paste0('study_id=', '"',studyid, '"'),
-               url = my_url
-      )
+    # Function to read in appropriate csv by given studyID
+    read_detects_files <- function(studyID) {
+      file <- files[str_detect(files, studyID)]
+      detections <- read_csv(file)
     }
-    
-    # Retreive ERDDAP data with list of user selected studyIDs, bind together and get distinct rows
-    df<- lapply(studyids, get_erddap) %>% 
+
+    # Read all studyID CSVs from input and bind together
+    lapply(studyids, read_detects_files) %>% 
       bind_rows() %>% 
-      distinct()
+      left_join(
+        TaggedFish %>% 
+          select(FishID = fish_id, Length = fish_length, Weight = fish_weight),
+        by = "FishID"
+      ) %>% 
+      rename(StudyID = studyID)
+
+    
+    # # Basic set up for RERDDAP 
+    # my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+    # JSATSinfo <- info('FED_JSATS_detects', url = my_url)
+    # 
+    # # Function that accepts a studyid and calls tabledap, allows repeated calls since
+    # # You can not simply do an %in% query
+    # get_erddap <- function(studyid) {
+    #   tabledap(JSATSinfo,
+    #            fields = c('study_id',  'fish_id', 'fish_length', 'fish_weight', 
+    #                       'receiver_general_location', 'receiver_region'),
+    #            paste0('study_id=', '"',studyid, '"'),
+    #            url = my_url
+    #   )
+    # }
+    # 
+    # # Retreive ERDDAP data with list of user selected studyIDs, bind together and get distinct rows
+    # df<- lapply(studyids, get_erddap) %>% 
+    #   bind_rows() %>% 
+    #   distinct()
     
   })
   
   output$gt_output <- render_gt({
 
+    detections <- gtVar()
     # Format the GT table
     make_gt_table <- function(x) {
-      x %>% 
-        mutate_at(vars(fish_length, fish_weight), as.numeric) %>% 
+      
+      release <- TaggedFish %>% 
+        filter(study_id %in% input$survival_datasets) %>% 
         mutate(k_factor = 100 * (fish_weight / (fish_length/10)^3)) %>% 
         group_by(study_id) %>% 
         summarise(
           count = n_distinct(fish_id),
-          n_to_i80 = sum(str_detect(receiver_general_location, "I80-50")),
-          n_to_benicia = sum(str_detect(receiver_general_location, "Benicia")),
-          n_survivor = sum(receiver_general_location %in% c("GoldenGateE", "GoldenGateW")),
           Length = mean(fish_length),
           Weight = mean(fish_weight),
           Condition = mean(k_factor)
+        )
+      
+      detects <- detections %>% 
+        filter(GEN %in% c("I80-50_Br", "BeniciaE", "BeniciaW", "GoldenGateE", "GoldenGateW")) %>% 
+        mutate(
+          GEN = ifelse(GEN == "GoldenGateE", "GoldenGate", GEN),
+          GEN = ifelse(GEN == "GoldenGateW", "GoldenGate", GEN),
+          GEN = ifelse(GEN == "BeniciaE", "Benicia", GEN),
+          GEN = ifelse(GEN == "BeniciaW", "Benicia", GEN),
+          GEN = ifelse(GEN == "I80-50_Br", "I80", GEN)
         ) %>% 
-        ungroup() %>% 
+        select(StudyID, FishID, GEN) %>% 
+        distinct() %>% 
+        group_by(StudyID, GEN) %>% 
+        summarise(
+          count = n()
+        ) 
+      
+      # Transform data so that each GEN is a column and unique detects is the value
+      detects <- pivot_wider(detects, names_from = "GEN", values_from = "count")
+      detects <- detects %>% select(StudyID, I80, Benicia, GoldenGate)
+      
+      
+      summary <- release %>% 
+        left_join(detects, by = c("study_id" = "StudyID"))
+      
+      summary %>% 
         gt(rowname_col = "study_id") %>% 
         tab_header(
           title = "Minimum Survival Summary"
@@ -1087,14 +1223,14 @@ server <- function(input, output, session) {
         tab_stubhead(label = md("**Study Group**")) %>% # md() wrapper allows text styling with MarkDown
         tab_footnote(
           footnote = "Mean values",
-          cells_column_labels(columns = c(5, 6, 7))
+          cells_column_labels(columns = c(2, 3, 4))
         ) %>% 
         cols_label(
           count = "Fish Tagged",
           Condition = "K Factor",
-          n_to_i80 = "Fish detected at I-80 Bridge",
-          n_to_benicia = "Fish detected at Benicia",
-          n_survivor = "Fish detected at Golden Gate"
+          I80 = "Fish detected at I-80 Bridge",
+          Benicia = "Fish detected at Benicia",
+          GoldenGate = "Fish detected at Golden Gate"
         ) %>% 
         fmt_number(
           columns = vars(Length, Weight, Condition),
@@ -1112,7 +1248,7 @@ server <- function(input, output, session) {
     
     name <- input$cumsurvival_datasets
     
-    file <- list.files("./Cumulative Survival/outputs", name, full.names = T)
+    file <- list.files("./Survival/outputs/Cumulative Survival", name, full.names = T)
     read_csv(file)
   })
   
@@ -1138,6 +1274,160 @@ server <- function(input, output, session) {
                           zeroline = FALSE))
 
   })
+  
+  
+
+# Movement ----------------------------------------------------------------
+
+  # Takes user selected studyIDs and retrieves data from ERDDAP
+  movementVar <-  reactive({
+    req(input$movement_dataset)
+    
+    waiter$show()
+    
+    # List of studyIDs to query for
+    studyids <- input$movement_dataset
+    
+    # Directory of detection files
+    files <- list.files("./data/detections/", full.names = T)
+    
+    read_detects_files <- function(studyID) {
+      file <- files[str_detect(files, studyID)]
+      detections <- read_csv(file)
+    }
+    
+    df <- lapply(studyids, read_detects_files) %>% 
+      bind_rows()
+    
+    # # Basic set up for RERDDAP 
+    # my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+    # JSATSinfo <- info('FED_JSATS_detects', url = my_url)
+    # 
+    # # Function that accepts a studyid and calls tabledap, allows repeated calls since
+    # # You can not simply do an %in% query
+    # get_erddap <- function(studyid) {
+    #   tabledap(JSATSinfo,
+    #            fields = c('study_id',  'fish_id', 'time', 'fish_release_date', 'release_river_km',
+    #                       'receiver_general_location', 'receiver_general_river_km ', 'receiver_region'),
+    #            paste0('study_id=', '"',studyid, '"'),
+    #            url = my_url
+    #   )
+    # }
+    # 
+    # # Retreive ERDDAP data with list of user selected studyIDs, bind together and get distinct rows
+    # df <- lapply(studyids, get_erddap) %>% 
+    #   bind_rows() %>% 
+    #   distinct()
+    
+    # df <- df %>% 
+    #   mutate(
+    #     time = ymd_hms(time),
+    #     fish_release_date = mdy_hms(fish_release_date),
+    #     release_river_km = as.numeric(release_river_km),
+    #     receiver_general_river_km = as.numeric(receiver_general_river_km)
+    #   ) %>% 
+    #   rename(
+    #     FishID = fish_id,
+    #     GEN = receiver_general_location,
+    #     GenRKM = receiver_general_river_km,
+    #     Region = receiver_region
+    #   )
+    
+    df <- df %>% 
+      left_join(
+        TaggedFish %>% 
+          select(FishID = fish_id, fish_release_date, release_river_km),
+        by = "FishID"
+      ) %>% 
+      mutate(fish_release_date = mdy_hms(fish_release_date))
+    
+    # Calculate time from release to receiver and dist to receiver
+    min_detects <- df %>% 
+      group_by(FishID, GEN, GenRKM, fish_release_date, release_river_km) %>% 
+      summarize(
+        min_time = min(time)
+      ) %>% 
+      mutate(
+        km_from_rel = release_river_km - GenRKM,
+        days_since_rel = difftime(min_time, fish_release_date, units = "days")
+      ) %>% 
+      arrange(FishID, min_time) %>% 
+      mutate(km_day = km_from_rel / as.numeric(days_since_rel)) %>% 
+      filter(km_from_rel > 0,
+             abs(km_day) < 200)
+    
+    speeds <- min_detects %>% 
+      group_by(GEN, GenRKM) %>% 
+      summarize(
+        N = n(),
+        min_travel_days = min(days_since_rel),
+        median_travel_days = median(days_since_rel),
+        max_travel_days = max(days_since_rel),
+        mean_km_day = mean(km_day),
+        median_km_day = median(km_day)
+      ) %>% 
+      ungroup() %>% 
+      mutate_if(is.difftime, as.numeric) %>% 
+      arrange(desc(GenRKM))
+    
+    
+    # # Build reach names to look at reach specific travel
+    # # Need to filter out Delta and bypasses
+    # list_of_GEN <- df %>% 
+    #   select(GEN, GenRKM, Region) %>% 
+    #   filter(
+    #     !Region %in% c("Sutter Bypass", "Yolo Bypass", "East Delta", "West Delta",
+    #                    "North Delta", "South Delta")
+    #   ) %>% 
+    #   distinct() %>% 
+    #   arrange(desc(GenRKM)) %>% 
+    #   pull(GEN)
+    # 
+    # reach_names <- c()
+    # for (i in 1:(length(list_of_GEN)-1)) {
+    #   reach_names <- c(reach_names, paste0(list_of_GEN[i], "_to_", 
+    #                                        list_of_GEN[i+1]))
+    # }
+    # 
+    # 
+      
+  })
+  
+  output$movement_gt <- render_gt({
+    
+    df <- movementVar()
+    
+    gt_tbl <- gt(data = df, rowname_col = "GEN")
+    
+    gt_tbl %>% 
+      tab_header(
+        title = md("**Travel time summary statistics**"),
+        subtitle = "Days and travel rates calculated from point of release to general
+        receiver location"
+      ) %>%
+      tab_stubhead(label = "General Receiver Location") %>% 
+      fmt_number(
+        decimals = 1,
+        columns = vars(min_travel_days, median_travel_days, max_travel_days,
+                       mean_km_day, median_km_day)
+      ) %>% 
+      cols_label(
+        min_travel_days = "Min",
+        median_travel_days = "Median", 
+        max_travel_days = "Max", 
+        mean_km_day = "Mean", 
+        median_km_day = "Median"
+      ) %>% 
+      tab_spanner(
+        label = "Time (days)",
+        columns = vars(min_travel_days, median_travel_days, max_travel_days)
+      ) %>%
+      tab_spanner(
+        label = "Travel rate (km/day)",
+        columns = vars(mean_km_day, median_km_day)
+      )
+    
+  })  
   
 }
 

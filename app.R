@@ -17,6 +17,8 @@ library(rerddap) # ERDDAP data retrievals
 library(slickR) # JS image carousel
 library(waiter) # Loading animations
 library(httr) # Check HTTP status for CDEC/ERDDAP
+library(vroom)
+library(sf)
 
 # Global ------------------------------------------------------------------
 
@@ -51,18 +53,21 @@ if (http_error("oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_receivers.html
       EndTime = mdy_hm(EndTime),
       water_year = ifelse(month(StartTime) <= 9, year(StartTime),
                           year(StartTime) + 1)
+    ) %>% 
+    filter(
+      SN != 1
     )
 
   
   # Save latest update to file
   write_csv(ReceiverDeployments, "./data/ReceiverDeployments.csv")
 } else {
-  ReceiverDeployments <- read_csv("./data/ReceiverDeployments.csv")
+  ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
 }
 
 VemcoReceiverDeployments <- read_csv("./data/VemcoReceiverDeployments.csv") %>%
   left_join(ReceiverDeployments %>% 
-              select(GPSname, LAT, LON) %>% 
+              select(GPSname, GEN, GenLat, GenLon) %>% 
               distinct()) %>%
   mutate(
     water_year = ifelse(month(StartTime) <= 9, year(StartTime),
@@ -251,11 +256,11 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                    The water year is designated by the calendar year in which 
                                    it ends and which includes 9 of the 12 months. Thus, the year
                                    ending September 30, 1999 is called the 1999 water year."),
-                          htmlOutput("map_marker_click"),
-                          tableOutput("receiver_table")
+                          htmlOutput("map_marker_click")
                         ),
                         mainPanel(
-                          leafletOutput("map", width = "100%", height = "650")
+                          leafletOutput("map", width = "100%", height = "650"),
+                          tableOutput("receiver_table")
                         )
                       )
              ),
@@ -514,8 +519,8 @@ server <- function(input, output, session) {
       # Set the default view
       setView(-122.159729,39.119407, 7) %>% 
       # Display receiver deploments as circle markers
-      addCircleMarkers(~LON, ~LAT, 
-                       popup = paste("GPSname: ", receivers$GPSname),
+      addCircleMarkers(~GenLon, ~GenLat, 
+                       popup = paste(receivers$GEN),
                        layerId = ~uid,
                        radius = 3,
                        stroke = FALSE,
@@ -537,66 +542,48 @@ server <- function(input, output, session) {
     
     # Display table info for clicked marker
     output$receiver_table <- renderTable({
-
-        # This is necessary because a user click keeps the p$id even if you select different type of receiver which will cause
-        # a no match 
-        if (p$id %in% VemcoReceiverDeployments$uid ) {
-          
-          if (input$receiverType == "Vemco") {
-          # This line necessary because when you click on a marker you can only get the id of the marker on top
-          # There can be multiple deployments at a single location, if we can get the GEN then we can filter deployments 
-          # with GEN to get the other info
-          GEN_vemco <- VemcoReceiverDeployments$GPSname[VemcoReceiverDeployments$uid == p$id]
-          
-          VemcoReceiverDeployments %>%
-            filter(
-              GPSname == GEN_vemco & water_year == input$water_year
-            ) %>%
-            select(
-              GPSname, VemcoSN, StartTime, EndTime
-            ) %>%
-            arrange(StartTime) %>%
-            mutate(
-              VemcoSN = as.character(VemcoSN),
-              StartTime = as.character(StartTime),
-              EndTime = as.character(EndTime)
-            )
-        }
-      }else {
+      
+      if (input$receiverType == "Vemco") {
+        # Give me the GEN for the clicked marker
+        GEN_click = VemcoReceiverDeployments$GEN[VemcoReceiverDeployments$uid == p$id]
         
-        if (p$id %in% ReceiverDeployments$uid ) {
-          GEN <- ReceiverDeployments$GPSname[ReceiverDeployments$uid == p$id]
-          
-          if (input$receiverType == "Autonomous") {
-            ReceiverDeployments %>% 
-              filter(
-                !(RecMake %in% c("ATS SR3017", "Tekno RT")) & GPSname == GEN & water_year == input$water_year
-              ) %>% 
-              select(
-                GPSname, SN, StartTime, EndTime
-              ) %>% 
-              arrange(StartTime) %>% 
-              mutate(
-                SN = as.character(SN),
-                StartTime = as.character(StartTime),
-                EndTime = as.character(EndTime)
-              )
-          }else {
-            ReceiverDeployments %>% 
-              filter(
-                RecMake %in% c("ATS SR3017", "Tekno RT") & GPSname == GEN & water_year == input$water_year
-              ) %>% 
-              select(
-                GPSname, SN, StartTime, EndTime
-              ) %>% 
-              arrange(StartTime) %>% 
-              mutate(
-                SN = as.character(SN),
-                StartTime = as.character(StartTime),
-                EndTime = as.character(EndTime)
-              )
-          }
-        }
+        # Display all the GPSnames that are associated with that GEN for the given
+        # water year along with SN, StartTime, and EndTime
+        VemcoReceiverDeployments %>%
+          filter(
+            GEN == GEN_click & water_year == input$water_year
+          ) %>%
+          select(
+            GPSname, VemcoSN, StartTime, EndTime
+          ) %>%
+          arrange(StartTime) %>%
+          mutate(
+            VemcoSN = as.character(VemcoSN),
+            StartTime = as.character(StartTime),
+            EndTime = as.character(EndTime)
+          )
+      
+      }else {
+        GEN_click = ReceiverDeployments$GEN[ReceiverDeployments$uid == p$id]
+        
+        # Display all the GPSnames that are associated with that GEN for the given
+        # water year along with SN, StartTime, and EndTime
+        ReceiverDeployments %>%
+          filter(
+            GEN == GEN_click & water_year == input$water_year
+          ) %>%
+          arrange(StartTime) %>%
+          mutate(
+            SN = as.character(SN),
+            StartTime = as.character(StartTime),
+            #EndTime = as.character(EndTime),
+            # If the receiver is RT and its EndTime is NA make it say 'Active' instead
+            EndTime = ifelse(RecMake %in% c("ATS SR3017", "Tekno RT") & is.na(EndTime), 
+                             "Active", as.character(EndTime))
+          ) %>% 
+          select(
+            GPSname, SN, StartTime, EndTime
+          )
       }
     })
   })
@@ -630,24 +617,40 @@ server <- function(input, output, session) {
       domain = c("KES", "BND", "BTC", "WLK")
     )
     
+    # Bring in a Sacramento River shapefile
+    rivers <- st_read("C:/Users/Tombo/Google Drive/UCSC/R/Shiny/data/GIS/sac_river_dissolve.shp")
+    # Transform datum
+    rivers <- st_transform(rivers, crs = '+proj=longlat +datum=WGS84')
+    # Need to drop z dimension: https://gis.stackexchange.com/questions/253898/adding-a-linestring-by-st-read-in-shiny-leaflet
+    rivers <- st_zm(rivers, drop = T, what = "ZM")
+    
+
     leaflet(data = cdec_stations) %>% 
-      addProviderTiles(providers$Stamen.Terrain, group = "Stamen Terrain",
-                       options = providerTileOptions(noWrap = TRUE)) %>% 
-      addProviderTiles(providers$Stamen.TonerLite, group = "Stamen Toner Lite",
-                       options = providerTileOptions(noWrap = TRUE)) %>%
-      addProviderTiles(providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
-                       options = providerTileOptions(noWrap = TRUE)) %>%
+      addPolygons(
+        data = rivers, color = "#668db3",
+        weight = 3, opacity = 1
+      ) %>% 
+      addProviderTiles(
+        providers$Stamen.Terrain, group = "Stamen Terrain",
+        options = providerTileOptions(noWrap = TRUE)) %>% 
+      addProviderTiles(
+        providers$Stamen.TonerLite, group = "Stamen Toner Lite",
+        options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(
+        providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
+        options = providerTileOptions(noWrap = TRUE)) %>%
       setView(mean(cdec_stations$longitude), mean(cdec_stations$latitude), 7) %>% 
-      addCircleMarkers(~longitude, ~latitude, 
-                       popup = ~station_id,
-                       color = ~pal(station_id),
-                       fillOpacity = 1.5,
-                       label = ~station_id,
-                       # Make labels always appear and offset them to the right of the markr
-                       labelOptions = labelOptions(
-                         noHide = T, 
-                         direction = "right", 
-                         offset = c(10,0))) %>% 
+      addCircleMarkers(
+        ~longitude, ~latitude, 
+        popup = ~station_id,
+        color = ~pal(station_id),
+        fillOpacity = 1.5,
+        label = ~station_id,
+        # Make labels always appear and offset them to the right of the markr
+        labelOptions = labelOptions(
+          noHide = T, 
+          direction = "right", 
+          offset = c(10,0))) %>% 
       addLayersControl(
         baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
         options = layersControlOptions(collapsed = FALSE)

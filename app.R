@@ -848,9 +848,10 @@ server <- function(input, output, session) {
       arrange(desc(GenRKM)) %>% 
       distinct()
     
-    # Create a grid of all receiver general locations by all dates from the earliest detection date to the 
-    # latest detection date
-    timestep <- expand.grid(receiver_loc$GEN, seq(min(detections$date), max(detections$date), by = 1),
+    # Create a grid of all receiver general locations by all dates from the 
+    # earliest detection date to the latest detection date
+    timestep <- expand.grid(receiver_loc$GEN, seq(min(detections$date), 
+                                                  max(detections$date), by = 1),
                             stringsAsFactors = F)
     colnames(timestep) <- c("GEN", "date")
     
@@ -871,29 +872,29 @@ server <- function(input, output, session) {
   })
   
   # Output leaflet Outmigration Animation of fish outmigration
-  # Takes data that has been pre-processed, and visualizes magnitude of unique detections by day at every receiver location
-  # Achieved by using addMinicharts which takes a time argument
+  # Takes data that has been pre-processed, and visualizes magnitude of unique 
+  # detections by day at every receiver location, achieved by using 
+  # addMinicharts which takes a time argument
   output$timemap <- renderLeaflet({
-    # data <- read_csv(paste0("./data/Timestep/", input$anim_dataset, ".csv"))
     data <- timestepVar()
 
-      leaflet(data = data, width = "100%", height = "800px") %>%
-        addProviderTiles(providers$Stamen.TerrainBackground) %>%
-        setView(mean(data$GenLon), mean(data$GenLat), 7) %>%
-        addMinicharts(
-          data$GenLon, data$GenLat,
-          chartdata = data$num_fish,
-          time = data$date,
-          fillColor = "blue",
-          width = 60, height = 60,
-          popup = popupArgs(
-            showValues = FALSE,
-            supValues = data %>% select(GEN, num_fish),
-            supLabels = c("GEN", "N = ")
-                  ),
-          showLabels = TRUE,
-          opacity = .7
-          )
+    leaflet(data = data, width = "100%", height = "800px") %>%
+      addProviderTiles(providers$Stamen.TerrainBackground) %>%
+      setView(mean(data$GenLon), mean(data$GenLat), 7) %>%
+      addMinicharts(
+        data$GenLon, data$GenLat,
+        chartdata = data$num_fish,
+        time = data$date,
+        fillColor = "blue",
+        width = 60, height = 60,
+        popup = popupArgs(
+          showValues = FALSE,
+          supValues = data %>% select(GEN, num_fish),
+          supLabels = c("GEN", "N = ")
+                ),
+        showLabels = TRUE,
+        opacity = .7
+        )
   })
 
   # Data Explorer  --------------------------------------------------
@@ -902,7 +903,7 @@ server <- function(input, output, session) {
   taggedfishVar <-  reactive({
     req(input$data_explorer_datasets)
     
-    waiter$show()
+    #waiter$show()
     
     # List of studyIDs to query for
     studyids <- input$data_explorer_datasets
@@ -917,33 +918,6 @@ server <- function(input, output, session) {
         Weight = fish_weight
       )
     
-    # # Basic set up for RERDDAP 
-    # my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-    # JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
-    # 
-    # # Function that accepts a studyid and calls tabledap, allows repeated calls since
-    # # You can not simply do an %in% query
-    # get_erddap <- function(studyid) {
-    #   tabledap(JSATSinfo,
-    #            fields = c('study_id', 'fish_id',
-    #                       'fish_length', 'fish_weight'),
-    #            paste0('study_id=', '"',studyid, '"'),
-    #            url = my_url,
-    #            distinct = T
-    #   ) 
-    # }
-    # 
-    # # Retreive ERDDAP data with list of user selected studyIDs, bind together and get distinct rows
-    # lapply(studyids, get_erddap) %>% 
-    #   bind_rows() %>% 
-    #   rename(
-    #     StudyID = study_id,
-    #     FishID = fish_id,
-    #     Length = fish_length,
-    #     Weight = fish_weight
-    #   ) %>% 
-    #   mutate_at(vars(Length, Weight), as.numeric)
-    
   })
   
   # Finds the optimal bin size using Freedman-Diaconis rule
@@ -952,7 +926,7 @@ server <- function(input, output, session) {
   output$bin_slider <- renderUI({
     tagged_fish <- taggedfishVar()
     
-    bins <- nclass.FD(tagged_fish[,input$variable])
+    bins <- nclass.FD(unlist(tagged_fish[,input$variable]))
     sliderInput("bin_width", "Bin width", min = 1, max = 50, value = bins)
   })
   
@@ -960,8 +934,10 @@ server <- function(input, output, session) {
   output$summarytable <- renderTable({
     
     mylabels <- list(Length = "Length (mm)", Weight ="Weight (g)")
-    as.data.frame(summary(tableby(StudyID ~ Length + Weight, data = taggedfishVar(),
-                                  control = tableby.control(digits = 2)), labelTranslations = mylabels, text = "html"))
+    as.data.frame(summary(tableby(StudyID ~ Length + Weight, 
+                                  data = taggedfishVar(),
+                                  control = tableby.control(digits = 2)), 
+                          labelTranslations = mylabels, text = "html"))
     
   }, sanitize.text.function = function(x) x)
   
@@ -972,7 +948,9 @@ server <- function(input, output, session) {
     # Based on the user selected plot type, use different ggplot options 
     plot_type <- switch(input$plot_type,
                         "boxplot" 	= 	geom_boxplot(),
-                        "histogram" =	geom_histogram(bins = input$bin_width, alpha=0.5,position="identity"),
+                        "histogram" =	geom_histogram(bins = input$bin_width, 
+                                                     alpha=0.5,
+                                                     position="identity"),
                         "density" 	=	geom_density(alpha=.75)
     )
     
@@ -1004,14 +982,13 @@ server <- function(input, output, session) {
         theme_classic() +
         theme(legend.position="top", axis.text=element_text(size=12))) 
     }
+    
   })
 
 # Time of Day -------------------------------------------------------------
   
   # Reactive list of GEN depending on StudyID selected
   GEN_list <-  reactive({
-    # file <- list.files("./data/detections")[str_detect(list.files("./data/detections"), input$time_of_day_input)]
-    # detections <- read_csv(paste0("./data/detections/", file))
     detections <- timeofdayVar()
     
     unique(detections$GEN)
@@ -1045,64 +1022,13 @@ server <- function(input, output, session) {
       bind_rows() %>% 
       mutate(hour = hour(time))
     
-    
-    # # Basic set up for RERDDAP 
-    # my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-    # JSATSinfo <- info('FED_JSATS_detects', url = my_url)
-    # 
-    # detections <- tabledap(JSATSinfo,
-    #                        fields = c('fish_id', 'time', 'receiver_general_location', 
-    #                                   'receiver_river_km'),
-    #                        paste0('study_id=', '"',input$time_of_day_input, '"'),
-    #                        url = my_url,
-    #                        distinct = T
-    # ) %>% 
-    #   left_join(
-    #     ReceiverDeployments %>% 
-    #       select(GEN, GenLat, GenLon) %>% 
-    #       distinct(), by = c("receiver_general_location" = "GEN")
-    #   ) %>% 
-    #   mutate(
-    #     time = ymd_hms(time),
-    #     hour = hour(time)
-    #     ) %>% 
-    #   rename(
-    #     GEN = receiver_general_location,
-    #     FishID = fish_id,
-    #     GenRKM = receiver_river_km 
-    #   ) %>% 
-    #   mutate(
-    #     GenRKM = as.numeric(GenRKM)
-    #   )
   })
 
   output$time_of_day_plot <- renderPlotly({
-    # Retrieve the file name in the detections folder that corresponds to the StudyID selected by the user
-    # Look at all files in the detections folder, choose the one that contains the StudyID string in its name
-    # file <- list.files("./data/detections")[str_detect(list.files("./data/detections"), input$time_of_day_input)]
-    
-    # Read in the appropriate csv
-    # detections <- read_csv(paste0("./data/detections/", file))
-    
-    # # Handle for if a csv DT is given in character format
-    # if (class(detections$DT) == "character") {
-    #   # Convert to POSIXct using these formats (hopefully these catch)
-    #   detections <- detections %>%
-    #     mutate(
-    #       datetime = as.POSIXct(detections$DT, tz = 'UTC',
-    #                             tryFormats = c("%m/%d/%Y %H:%M",
-    #                                            "%m/%d/%Y %H:%M:%S")),
-    #       hour = hour(datetime)
-    #     )
-    # }else {
-    #   # Case if DT is not character, Excel serial numeric format
-    #   detections <- detections %>%
-    #     mutate(
-    #       datetime = as.POSIXct(DT * (60*60*24), tz = "UTC", origin = "1899-12-30"),
-    #       hour = hour(datetime)
-    #     )
-    # }
-    
+    # Retrieve the file name in the detections folder that corresponds to the 
+    # StudyID selected by the user, Look at all files in the detections folder, 
+    # choose the one that contains the StudyID string in its name
+
     detections <- timeofdayVar()
     
     # Get first detection time of each fish at each GEN
@@ -1110,16 +1036,17 @@ server <- function(input, output, session) {
       group_by(FishID, GEN) %>% 
       summarise(first_detection = min(hour))
 
-    # If user selected to examine time of arrivals by GEN filter the detection file by the GEN they chose
+    # If user selected to examine time of arrivals by GEN filter the detection 
+    # file by the GEN they chose
     if (input$time_of_day_radio == "By GEN") {
       filtered <- filtered %>% 
         filter(GEN == input$time_of_day_GEN)
     }
     
     # Bins data by hour explicitly from 0:23 hours
-    # Necessary to do it this way instead of dplyr group_by b/c not all hours may be represented
-    # hour_freq <- data.frame("hour" = 0:23, freq = 0)
-    
+    # Necessary to do it this way instead of dplyr group_by b/c not all hours 
+    # may be represented
+
     hour_freq <- data.frame("hour" = 0:23) %>% 
       left_join(filtered %>% 
                   group_by(first_detection) %>% 
@@ -1129,15 +1056,6 @@ server <- function(input, output, session) {
       mutate(freq = ifelse(is.na(freq), 0, freq),
              percent_pass = ((freq / sum(freq)) * 100)
              )
-    
-    # for (i in 1:nrow(filtered)) {
-    #   hour1 = filtered$first_detection[i]
-    #   
-    #   hour_freq[hour_freq$hour == hour1,]$freq <- hour_freq[hour_freq$hour == hour1,]$freq +1
-    #   
-    # }
-    # 
-    # hour_freq$percent_pass <- (hour_freq$freq / sum(hour_freq$freq)) * 100
     
     # Find Sunset, Sunrise for earliest and latest date using mean lat/lon
     receivers <- detections %>% 
@@ -1151,23 +1069,38 @@ server <- function(input, output, session) {
     earliest_date <- as.Date(min(detections$time))
     latest_date <- as.Date(max(detections$time))
     
-    earliest_sr_ss <- getSunlightTimes(earliest_date, avg_lat, avg_lon, keep = c("sunrise", "sunset"), tz = "America/Los_Angeles")
-    latest_sr_ss <- getSunlightTimes(latest_date, avg_lat, avg_lon, keep = c("sunrise", "sunset"), tz = "America/Los_Angeles")
+    earliest_sr_ss <- getSunlightTimes(earliest_date, 
+                                       avg_lat, 
+                                       avg_lon, 
+                                       keep = c("sunrise", "sunset"), 
+                                       tz = "America/Los_Angeles")
+    latest_sr_ss <- getSunlightTimes(latest_date, 
+                                     avg_lat, 
+                                     avg_lon, 
+                                     keep = c("sunrise", "sunset"), 
+                                     tz = "America/Los_Angeles")
     
-    earliest_sunrise <- hour(earliest_sr_ss$sunrise) + (minute(earliest_sr_ss$sunrise)/60) + (second(earliest_sr_ss$sunrise)/3600)
-    earliest_sunset <- hour(earliest_sr_ss$sunset) + (minute(earliest_sr_ss$sunset)/60) + (second(earliest_sr_ss$sunset)/3600)
+    earliest_sunrise <- hour(earliest_sr_ss$sunrise) + 
+      (minute(earliest_sr_ss$sunrise)/60) + 
+      (second(earliest_sr_ss$sunrise)/3600)
     
-    latest_sunrise <- hour(latest_sr_ss$sunrise) + (minute(latest_sr_ss$sunrise)/60) + (second(latest_sr_ss$sunrise)/3600)
-    latest_sunset <- hour(latest_sr_ss$sunset) + (minute(latest_sr_ss$sunset)/60) + (second(latest_sr_ss$sunset)/3600)
+    earliest_sunset <- hour(earliest_sr_ss$sunset) + 
+      (minute(earliest_sr_ss$sunset)/60) + (second(earliest_sr_ss$sunset)/3600)
     
-    # Convert hour to factor and give it specific levels, so that it will appear as 12:23, 0:11 on the x-axis
+    latest_sunrise <- hour(latest_sr_ss$sunrise) + 
+      (minute(latest_sr_ss$sunrise)/60) + (second(latest_sr_ss$sunrise)/3600)
+    
+    latest_sunset <- hour(latest_sr_ss$sunset) + 
+      (minute(latest_sr_ss$sunset)/60) + (second(latest_sr_ss$sunset)/3600)
+    
+    # Convert hour to factor and give it specific levels, so that it will appear 
+    # as 12:23, 0:11 on the x-axis
     hour_freq$hour <- factor(hour_freq$hour, levels = c(12:23, 0:11))
     
     # Create bar plot to show proportion of detections by hour
     p <- ggplot(data = hour_freq, mapping = aes(x = hour, y = percent_pass)) +
       # Add rectangle representing "nighttime", using the earliest sunrise and earliest sunset values, had to use 
       # ymax = 999999 because plotly won't take Inf
-      # ggplot version = geom_rect(xmin = earliest_sunrise, xmax = earliest_sunset, ymin = 0, ymax = 999999, fill = "grey70", alpha = 0.5) +
       geom_rect(data=hour_freq, aes(NULL,NULL,xmin=earliest_sunrise,xmax=earliest_sunset),
                 ymin=0,ymax=999999, size=0.5, alpha=0.2) +
       geom_col() +
@@ -1208,32 +1141,7 @@ server <- function(input, output, session) {
   # will autowidth the same length as the plot
   # Couldn't figure out how to autowidth in ggplot
   output$time_of_day_caption <- renderUI({
-    # Retrieve the file name in the detections folder that corresponds to the StudyID selected by the user
-    # Look at all files in the detections folder, choose the one that contains the StudyID string in its name
-    # file <- list.files("./data/detections")[str_detect(list.files("./data/detections"), input$time_of_day_input)]
-    # 
-    # # Read in the appropriate csv
-    # detections <- read_csv(paste0("./data/detections/", file))
-    # 
-    # # Handle for if a csv DT is given in character format
-    # if (class(detections$DT) == "character") {
-    #   # Convert to POSIXct using these formats (hopefully these catch)
-    #   detections <- detections %>% 
-    #     mutate(
-    #       datetime = as.POSIXct(detections$DT, tz = 'UTC', 
-    #                             tryFormats = c("%m/%d/%Y %H:%M",
-    #                                            "%m/%d/%Y %H:%M:%S")),
-    #       hour = hour(datetime)
-    #     )
-    # }else {
-    #   # Case if DT is not character, Excel serial numeric format
-    #   detections <- detections %>% 
-    #     mutate(
-    #       datetime = as.POSIXct(DT * (60*60*24), tz = "UTC", origin = "1899-12-30"),
-    #       hour = hour(datetime)
-    #     )
-    # }
-    
+   
     detections <- timeofdayVar() %>% 
       mutate(time = ymd_hms(time))
     # Get earliest date and latest dates to compare differences in these times
@@ -1724,23 +1632,6 @@ server <- function(input, output, session) {
     }
   })
   
-  # output$reachSurvGT <- render_gt({
-  #   
-  #   df <- reachSurvVar()
-  #   
-  #   df %>% 
-  #     select('Reach Start' = reach_start, "Reach End" = reach_end, 
-  #            "RKM Start" = rkm_start, "RKM End" = rkm_end, Region, Survival = estimate, 
-  #            LCI = lcl, UCI = ucl, "Count Start" = count_at_start, "Count End" = count_at_end) %>% 
-  #     gt() %>%
-  #     tab_header(
-  #       title = "Reach Survival",
-  #       subtitle = input$reachSurvInput
-  #     )
-  #   
-  # })
-  
-  
 
 # Movement ----------------------------------------------------------------
 
@@ -1763,40 +1654,6 @@ server <- function(input, output, session) {
     
     df <- lapply(studyids, read_detects_files) %>% 
       bind_rows()
-    
-    # # Basic set up for RERDDAP 
-    # my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-    # JSATSinfo <- info('FED_JSATS_detects', url = my_url)
-    # 
-    # # Function that accepts a studyid and calls tabledap, allows repeated calls since
-    # # You can not simply do an %in% query
-    # get_erddap <- function(studyid) {
-    #   tabledap(JSATSinfo,
-    #            fields = c('study_id',  'fish_id', 'time', 'fish_release_date', 'release_river_km',
-    #                       'receiver_general_location', 'receiver_general_river_km ', 'receiver_region'),
-    #            paste0('study_id=', '"',studyid, '"'),
-    #            url = my_url
-    #   )
-    # }
-    # 
-    # # Retreive ERDDAP data with list of user selected studyIDs, bind together and get distinct rows
-    # df <- lapply(studyids, get_erddap) %>% 
-    #   bind_rows() %>% 
-    #   distinct()
-    
-    # df <- df %>% 
-    #   mutate(
-    #     time = ymd_hms(time),
-    #     fish_release_date = mdy_hms(fish_release_date),
-    #     release_river_km = as.numeric(release_river_km),
-    #     receiver_general_river_km = as.numeric(receiver_general_river_km)
-    #   ) %>% 
-    #   rename(
-    #     FishID = fish_id,
-    #     GEN = receiver_general_location,
-    #     GenRKM = receiver_general_river_km,
-    #     Region = receiver_region
-    #   )
     
     df <- df %>% 
       left_join(
@@ -1835,26 +1692,6 @@ server <- function(input, output, session) {
       mutate_if(is.difftime, as.numeric) %>% 
       arrange(desc(GenRKM))
     
-    
-    # # Build reach names to look at reach specific travel
-    # # Need to filter out Delta and bypasses
-    # list_of_GEN <- df %>% 
-    #   select(GEN, GenRKM, Region) %>% 
-    #   filter(
-    #     !Region %in% c("Sutter Bypass", "Yolo Bypass", "East Delta", "West Delta",
-    #                    "North Delta", "South Delta")
-    #   ) %>% 
-    #   distinct() %>% 
-    #   arrange(desc(GenRKM)) %>% 
-    #   pull(GEN)
-    # 
-    # reach_names <- c()
-    # for (i in 1:(length(list_of_GEN)-1)) {
-    #   reach_names <- c(reach_names, paste0(list_of_GEN[i], "_to_", 
-    #                                        list_of_GEN[i+1]))
-    # }
-    # 
-    # 
       
   })
   

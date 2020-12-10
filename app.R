@@ -1,3 +1,6 @@
+
+start <- Sys.time()
+
 library(shiny)
 library(shinydashboard) # shiny tabs
 library(shinythemes)
@@ -19,53 +22,103 @@ library(waiter) # Loading animations
 library(httr) # Check HTTP status for CDEC/ERDDAP
 library(vroom)
 library(sf)
+library(DT)
+library(profvis)
 
 # Global ------------------------------------------------------------------
 
-## Download data from ERDAPP - ReceiverDeployments
-my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-JSATSinfo <- info('FED_JSATS_receivers', url = my_url)
+# Load data
+# --- ReceiverDeployments
+# --- TaggedFish
+# --- VemcoReceiverDeployments
+# --- Detections
+# --- CDEC Flows
 
-# Save latest table to file, if ERDDAP is down use last saved file 
-if (http_error("oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_receivers.html") == FALSE) {
-  ReceiverDeployments <- tabledap(JSATSinfo, url = my_url)  
-  
-  # Fix column names and correct column types
-  ReceiverDeployments <- ReceiverDeployments %>% 
-    rename(
-      SN = receiver_serial_number,
-      GEN = receiver_general_location,
-      Region = receiver_region,
-      GPSname = receiver_location,
-      LAT = latitude,
-      LON = longitude,
-      RKM = receiver_river_km,
-      GenLat = receiver_general_latitude,
-      GenLon = receiver_general_longitude,
-      GenRKM = receiver_general_river_km,
-      RecMake = receiver_make,
-      StartTime = receiver_start,
-      EndTime = receiver_end
-    ) %>% 
-    mutate_at(vars(SN, LAT, LON, RKM, GenLat, GenLon, GenRKM), as.numeric) %>% 
-    mutate(
-      StartTime = mdy_hm(StartTime),
-      EndTime = mdy_hm(EndTime),
-      water_year = ifelse(month(StartTime) <= 9, year(StartTime),
-                          year(StartTime) + 1)
-    ) %>% 
-    filter(
-      SN != 1
-    )
+# Check for changes every 90 days
+  # If last dl was > 90 days update files
+  # else read in csv
 
-  
-  # Save latest update to file
-  write_csv(ReceiverDeployments, "./data/ReceiverDeployments.csv")
-} else {
+# Download updates every 90 days
+last_checked_date <- read_rds("last_checked_date.RDS")
+
+## Load ReceiverDeployments and TaggedFish
+# If last update check was < 90 days read in CSVs (much faster load times)
+if (as.numeric(Sys.Date() - last_checked_date) < 90) {
   ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
+  TaggedFish <- vroom("./data/TaggedFish.csv")
+  
+} else { 
+  # Else check if ERDDAP is online, x returns TRUE if database is down or "Timeout"
+  # if the http check timeouts out 
+  x <- tryCatch(http_error("oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_receivers.html", 
+                           timeout(3)), error=function(e) print("Timeout"))
+  
+  # If the database isn't working then read csv
+  if (x == TRUE | x == "Timeout") {
+    ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
+    TaggedFish <- vroom("./data/TaggedFish.csv")
+  } else {
+    # If database is working then check for updates
+    
+    ## Download ReceiverDeployments
+    my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+    JSATSinfo <- info('FED_JSATS_receivers', url = my_url)
+    ReceiverDeployments <- tabledap(JSATSinfo, url = my_url)  
+    
+    # Fix column names and correct column types
+    ReceiverDeployments <- ReceiverDeployments %>% 
+      rename(
+        SN = receiver_serial_number,
+        GEN = receiver_general_location,
+        Region = receiver_region,
+        GPSname = receiver_location,
+        LAT = latitude,
+        LON = longitude,
+        RKM = receiver_river_km,
+        GenLat = receiver_general_latitude,
+        GenLon = receiver_general_longitude,
+        GenRKM = receiver_general_river_km,
+        RecMake = receiver_make,
+        StartTime = receiver_start,
+        EndTime = receiver_end
+      ) %>% 
+      mutate_at(vars(SN, LAT, LON, RKM, GenLat, GenLon, GenRKM), as.numeric) %>% 
+      mutate(
+        StartTime = mdy_hm(StartTime),
+        EndTime = mdy_hm(EndTime),
+        water_year = ifelse(month(StartTime) <= 9, year(StartTime),
+                            year(StartTime) + 1)
+      ) %>% 
+      filter(
+        SN != 1
+      )
+    
+    # Save latest update to file
+    write_csv(ReceiverDeployments, "./data/ReceiverDeployments.csv")
+    
+    ## Download TaggedFish
+    my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+    JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
+    
+    TaggedFish <- tabledap(JSATSinfo, url = my_url)  
+    
+    # Fix column names and correct column types
+    TaggedFish <- TaggedFish %>% 
+      mutate_at(vars(tag_weight, tag_pulse_rate_interval_nominal, tag_warranty_life,
+                     fish_length, fish_weight, release_latitude, release_longitude,
+                     release_river_km), as.numeric) 
+    
+    # Save latest update to file
+    write_csv(TaggedFish, "./data/TaggedFish.csv")
+    
+    # Change the last saved date to today
+    last_checked_date <- Sys.Date()
+    saveRDS(last_checked_date, "last_checked_date.RDS")
+  }
 }
-
-VemcoReceiverDeployments <- read_csv("./data/VemcoReceiverDeployments.csv") %>%
+  
+# This must be manually updated
+VemcoReceiverDeployments <- vroom("./data/VemcoReceiverDeployments.csv") %>%
   left_join(ReceiverDeployments %>% 
               select(GPSname, GEN, GenLat, GenLon) %>% 
               distinct()) %>%
@@ -78,127 +131,55 @@ VemcoReceiverDeployments <- read_csv("./data/VemcoReceiverDeployments.csv") %>%
 ReceiverDeployments$uid <- 1:nrow(ReceiverDeployments)
 VemcoReceiverDeployments$uid <- 1:nrow(VemcoReceiverDeployments)
 
-
-## Download data from ERDAPP - TaggedFish
-my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
-
-# Save latest table to file, if ERDDAP is down use last saved file 
-if (http_error("oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_taggedfish.html") == FALSE) {
-  TaggedFish <- tabledap(JSATSinfo, url = my_url)  
-  
-  # Fix column names and correct column types
-  TaggedFish <- TaggedFish %>% 
-    mutate_at(vars(tag_weight, tag_pulse_rate_interval_nominal, tag_warranty_life,
-                   fish_length, fish_weight, release_latitude, release_longitude,
-                   release_river_km), as.numeric) 
-
-  # Save latest update to file
-  write_csv(TaggedFish, "./data/TaggedFish.csv")
-} else {
-  TaggedFish <- read_csv("./data/TaggedFish.csv")
-}
-
-## Download data from ERDAPP - Detections
-my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-JSATSinfo <- info('FED_JSATS_detects', url = my_url)
-
-# Retrieve list of valid studyIDs in ERDDAP but first check if site is down
-#If ERDDAP is not down retrieve list of studyIDs and save to file
-if (http_error("https://oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_detects.html") == FALSE) {
-  studyid_list <- tabledap(JSATSinfo,
-                           fields = c('study_id'),
-                           url = my_url,
-                           distinct = TRUE
-  ) %>%
-    filter(study_id != "2017_BeaconTag") %>%
-    pull(study_id)
-
-  # If any of the currently observed studyIDs is not in the saved file, rewrite it with the new
-  # StudyIDs
-  saved_studyid_list <- readRDS("studyid_list.RDS")
-  if (any(studyid_list != saved_studyid_list)) {
-    saveRDS(studyid_list, file = "studyid_list.RDS")
-    #########
-    ####  INCLUDE SOMETHING HERE THAT WILL ALERT THAT A NEW STUDYID IS ONLINE
-    #########
-  }
-}else {
-  studyid_list <- readRDS("studyid_list.RDS")
-}
-
 #### List of studyIDs relevant to the project and selectable in the app
 #### Update this list as needed to allow for additional studyIDs to be selected
-studyid_list <- c("BC_Jumpstart_2019", "CNFH_FMR_2019", "ColemanFall_2012", "ColemanFall_2013",
-                  "ColemanFall_2016", "ColemanFall_2017", "ColemanLateFall_2018", "ColemanLateFall_2019",
-                  "ColemanLateFall_2020", "DeerCk_SH_Wild_2018", "DeerCk_Wild 2019", "DeerCk_Wild_2017",
-                  "DeerCk_Wild_2018", "FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", "FR_Spring_2019",
-                  "MillCk_SH_Wild_2015", "MillCk_SH_Wild_2016", "MillCk_Wild 2019", "MillCk_Wild_2013",
-                  "MillCk_Wild_2014", "MillCk_Wild_2015", "MillCk_Wild_2016", "MillCk_Wild_2016_DS",
-                  "MillCk_Wild_2017", "MillCk_Wild_2018", "Nimbus_Fall_2016", "Nimbus_Fall_2017",
-                  "Nimbus_Fall_2018", "RBDD_2017", "RBDD_2018", "SB_Spring_2015", "SB_Spring_2016",
-                  "SB_Spring_2017", "SB_Spring_2018", "SB_Spring_2019", "Winter_H_2013", "Winter_H_2014",
-                  "Winter_H_2015", "Winter_H_2016", "Winter_H_2017", "Winter_H_2018", "Winter_H_2019")
+studyid_list <- c("BC_Jumpstart_2019", "CNFH_FMR_2019", "ColemanFall_2012", 
+                  "ColemanFall_2013", "ColemanFall_2016", "ColemanFall_2017", 
+                  "ColemanLateFall_2018", "ColemanLateFall_2019", 
+                  "ColemanLateFall_2020", "DeerCk_SH_Wild_2018", 
+                  "DeerCk_Wild 2019", "DeerCk_Wild_2017","DeerCk_Wild_2018", 
+                  "FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", 
+                  "FR_Spring_2019","MillCk_SH_Wild_2015", "MillCk_SH_Wild_2016", 
+                  "MillCk_Wild 2019", "MillCk_Wild_2013", "MillCk_Wild_2014", 
+                  "MillCk_Wild_2015", "MillCk_Wild_2016", "MillCk_Wild_2016_DS",
+                  "MillCk_Wild_2017", "MillCk_Wild_2018", "Nimbus_Fall_2016", 
+                  "Nimbus_Fall_2017", "Nimbus_Fall_2018", "RBDD_2017", "RBDD_2018", 
+                  "SB_Spring_2015", "SB_Spring_2016", "SB_Spring_2017", 
+                  "SB_Spring_2018", "SB_Spring_2019", "Winter_H_2013", 
+                  "Winter_H_2014", "Winter_H_2015", "Winter_H_2016", 
+                  "Winter_H_2017", "Winter_H_2018", "Winter_H_2019")
 
-# Check to see that there is a detection file for each studyID in the studyid_list, if not
-# download it into the data folder
-check_detects_downloaded <- function(studyID) {
-  # Detection files are named by studyID now get vector of file studyID names without extension
-  files <- unlist(strsplit(list.files("./data/detections"), ".csv"))
-  
-  # Look at the files in the detections folder, see if there is a match between the StudyID name
-  # and the list of file names, if there is not download that studyID and put into the folder
-  if (!(studyID %in% files)) {
-    JSATSinfo <- info('FED_JSATS_detects', url = my_url)
-    
-    detects_fields <- c('study_id', 'fish_id', 'time', 'receiver_general_location', 
-                        'receiver_serial_number', 'latitude', 'longitude')
-    
-    detections <- tabledap(JSATSinfo,
-                           fields = detects_fields,
-                           paste0('study_id=', '"',studyID, '"'),
-                           url = my_url,
-                           distinct = TRUE) %>% 
-      mutate(time = ymd_hms(time)) %>% 
-      rename(
-        studyID = study_id,
-        FishID = fish_id,
-        GEN = receiver_general_location,
-        SN = receiver_serial_number,
-        LAT = latitude,
-        LON = longitude
-      ) %>% 
-      left_join(ReceiverDeployments %>% 
-                  select(GEN, Region, GenLat, GenLon, GenRKM) %>% 
-                  distinct(), by = "GEN")
-    
-    file_path <- paste0("./data/detections/", studyID, ".csv")
-    write_csv(detections, file_path)
-  }
-}
+survivalStudyIDs <- files <- unlist(strsplit(
+  list.files("./Survival/Reach Survival Per 10km"), "_reach_survival.csv"))
 
-lapply(studyid_list, check_detects_downloaded)
 
-## Hydrology
+## Load Hydrology data from CDEC
 
-# Gather flow data from CDEC, save to file to reduce calls to CDEC which is intermittently down
-comb_flow <- read_csv("./data/comb_flow.csv")
+# Gather flow data from CDEC, save to file to reduce calls to CDEC which is 
+# intermittently down
+comb_flow <- vroom("./data/comb_flow.csv", col_types = c(Index = "D", KES = "d",
+                                                         BND = "d", BTC = "d",
+                                                         WLK = "d"))
+
 
 # Update file with new flow data if it has been over 30 days since last download
 if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
-  
   # Choose CDEC gauges to display
   gauges <- c("KES", "BND", "BTC", "WLK")
   
   # Apply cdec_datasets() on list of gauges, to get station metadata
-  # Then apply function to filter to only look at information from sensor 20 and 23 (river flow sensors)
-  # Then bind the rows together, then find what the max start date was, ultimately to get the start_date I want to use
+  # Then apply function to filter to only look at information from sensor 20 
+  # and 23 (river flow sensors) Then bind the rows together, then find what the 
+  # max start date was, ultimately to get the start_date I want to use
   # That all the gauges are included in
-  start_date <- max((lapply(lapply(gauges, cdec_datasets), function(x) filter(x, sensor_number %in% c("20", "23"))) %>% bind_rows())$start)
+  start_date <- max((lapply(lapply(gauges, cdec_datasets), 
+                            function(x) filter(x, sensor_number %in% 
+                                                 c("20", "23"))) %>% 
+                       bind_rows())$start)
   
   
-  # apply the list of gauges to function that queries CDEC to get daily flow then turns it into 
-  # an xts (time series object) object which is needed for dygraphs
+  # apply the list of gauges to function that queries CDEC to get daily flow 
+  # then turns it into an xts (time series object) object which is needed for dygraphs
   flows = lapply(gauges,
                  function(x) {
                    if (x == "KES") { # If Keswick, use reservoir outflow (23) instead 
@@ -222,14 +203,17 @@ if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
   comb_flow2 <- as.data.frame(comb_flow) %>% 
     rownames_to_column("Index")
   
+  # Close connection with comb_flow.csv so that I can overwrite it with new data
+  rm(comb_flow)
   write_csv(comb_flow2, "./data/comb_flow.csv")
   
 }else {
   comb_flow <- as.xts(read.csv.zoo("./data/comb_flow.csv"))
 }
 
-cdec_stations <- read_csv("./data/cdec_stations.csv")
+cdec_stations <- vroom("./data/cdec_stations.csv")
 
+end <- Sys.time()
 # UI ----------------------------------------------------------------------
 
 ui <- fluidPage(theme = shinytheme("flatly"),
@@ -260,7 +244,7 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                         ),
                         mainPanel(
                           leafletOutput("map", width = "100%", height = "650"),
-                          tableOutput("receiver_table")
+                          dataTableOutput("receiver_table")
                         )
                       )
              ),
@@ -332,32 +316,60 @@ ui <- fluidPage(theme = shinytheme("flatly"),
              ),
              tabPanel("Survival",
                       tabsetPanel(
-                        tabPanel("Unique Detections",
+                        tabPanel("Cumulative Survival",
                                  headerPanel("Select Options"),
                                  sidebarPanel(
-                                   selectInput("survival_datasets", "Study Populations",
-                                               choices = studyid_list,
-                                               selectize = T,
-                                               multiple = T)
+                                   uiOutput("cumSurvSelect"),
+                                   # selectInput("cumsurvival_datasets", "Study Group",
+                                   #             choices = survivalStudyIDs),
+                                   # ### These need to be manually updated
+                                   # choices = c("ColemanFall", "ColemanLateFall", "DeerCk", "MillCk",
+                                   #             "RBDD")) #, "Sutter Bypass", "Winter"
+                                   radioButtons("cumsurvival_radio", 
+                                                "View",
+                                                c("Plot", "Table")
+                                   ),
+                                   leafletOutput("survival_map2")
                                  ),
                                  mainPanel(
-                                   gt_output("gt_output")
+                                   conditionalPanel(
+                                     condition = "input.cumsurvival_radio == 'Plot'",
+                                     plotlyOutput("plotly_survival_output")
+                                   ),
+                                   conditionalPanel(
+                                     condition = "input.cumsurvival_radio == 'Table'",
+                                     dataTableOutput('cumSurvDT')
+                                   )
+                                 )
+                        ),
+                        tabPanel("Reach Survival",
+                                 headerPanel("Select Options"),
+                                 sidebarPanel(
+                                   uiOutput("reachSurvSelect"),
+                                   # selectInput("reachSurvInput", "Study Group",
+                                   #             choices = survivalStudyIDs),
+                                   # ### These need to be manually updated
+                                   # choices = c("ColemanFall", "ColemanLateFall", "DeerCk", "MillCk",
+                                   #             "RBDD")) #, "Sutter Bypass", "Winter"
+                                   radioButtons("reachSurvRadio", 
+                                                "View",
+                                                c("Plot", "Table")
+                                   ),
+                                   leafletOutput("reachSurvMap")
+                                 ),
+                                 mainPanel(
+                                   conditionalPanel(
+                                     condition = "input.reachSurvRadio == 'Plot'",
+                                     plotlyOutput("reachSurvPlotly")
+                                   ),
+                                   conditionalPanel(
+                                     condition = "input.reachSurvRadio == 'Table'",
+                                     dataTableOutput('reachSurvDT')
+                                   )
                                  )
                         )
-                        # ,
-                        # tabPanel("Estimated Survival",
-                        #          headerPanel("Select Options"),
-                        #          sidebarPanel(
-                        #            selectInput("cumsurvival_datasets", "Study Group",
-                        #                        ### These need to be manually updated
-                        #                        choices = c("Coleman Fall", "Deer Creek", "Mill Creek",
-                        #                                    "RBDD", "Sutter Bypass", "Winter"))
-                        #          ),
-                        #          mainPanel(
-                        #            plotlyOutput("plotly_survival_output")
-                        #          )
-                        # )
                       )
+
              ),
              tabPanel("Movement",
                       headerPanel("Select Options"),
@@ -494,10 +506,12 @@ server <- function(input, output, session) {
     
     # Use user input to query receiver type and assign colors
     if (input$receiverType == "Autonomous") {
-      receivers <- subset(ReceiverDeployments, water_year == input$water_year & !(RecMake %in% c("ATS SR3017", "Tekno RT")))
+      receivers <- subset(ReceiverDeployments, water_year == input$water_year & 
+                            !(RecMake %in% c("ATS SR3017", "Tekno RT")))
       color <- "purple"
     }else if (input$receiverType == "Real-time"){
-      receivers <- subset(ReceiverDeployments, water_year == input$water_year & RecMake %in% c("ATS SR3017", "Tekno RT"))
+      receivers <- subset(ReceiverDeployments, water_year == input$water_year & 
+                            RecMake %in% c("ATS SR3017", "Tekno RT"))
       color <- "red"
     }else if(input$receiverType == "Vemco"){ 
       receivers <- subset(VemcoReceiverDeployments, water_year == input$water_year)
@@ -528,66 +542,172 @@ server <- function(input, output, session) {
                        fillOpacity = 1) %>% 
       # Give control for selecting basemaps
       addLayersControl(
-        baseGroups = c("Open Street Map", "Stamen Terrain", "Esri Nat Geo", "Esri World Imagery"),
+        baseGroups = c("Open Street Map", "Stamen Terrain", "Esri Nat Geo", 
+                       "Esri World Imagery"),
         options = layersControlOptions(collapsed = FALSE)
       ) %>% 
       # Button to reset to original view
       addResetMapButton()
   })
   
+  prevRecType <- reactiveVal("")
+  prevYear <- reactiveVal("")
+
   # Produces table output in response to clicks on receiver deployment map markers
   observeEvent(input$map_marker_click, {
     # Essentially the attributes of the clicked receiver marker is assigned to p
     p <- input$map_marker_click
     
-    # Display table info for clicked marker
-    output$receiver_table <- renderTable({
+    if (input$receiverType == "Vemco") {
+      print("2")
       
-      if (input$receiverType == "Vemco") {
-        # Give me the GEN for the clicked marker
-        GEN_click = VemcoReceiverDeployments$GEN[VemcoReceiverDeployments$uid == p$id]
-        
-        # Display all the GPSnames that are associated with that GEN for the given
-        # water year along with SN, StartTime, and EndTime
-        VemcoReceiverDeployments %>%
-          filter(
-            GEN == GEN_click & water_year == input$water_year
-          ) %>%
-          select(
-            GPSname, VemcoSN, StartTime, EndTime
-          ) %>%
-          arrange(StartTime) %>%
-          mutate(
-            VemcoSN = as.character(VemcoSN),
-            StartTime = as.character(StartTime),
-            EndTime = as.character(EndTime)
-          )
+      # Give me the GEN for the clicked marker
+      GEN_click = VemcoReceiverDeployments$GEN[VemcoReceiverDeployments$uid == p$id]
       
-      }else {
-        GEN_click = ReceiverDeployments$GEN[ReceiverDeployments$uid == p$id]
-        
-        # Display all the GPSnames that are associated with that GEN for the given
-        # water year along with SN, StartTime, and EndTime
-        ReceiverDeployments %>%
-          filter(
-            GEN == GEN_click & water_year == input$water_year
-          ) %>%
-          arrange(StartTime) %>%
-          mutate(
-            SN = as.character(SN),
-            StartTime = as.character(StartTime),
-            #EndTime = as.character(EndTime),
-            # If the receiver is RT and its EndTime is NA make it say 'Active' instead
-            EndTime = ifelse(RecMake %in% c("ATS SR3017", "Tekno RT") & is.na(EndTime), 
-                             "Active", as.character(EndTime))
-          ) %>% 
-          select(
-            GPSname, SN, StartTime, EndTime
-          )
-      }
-    })
+      prevRecType(input$receiverType)
+      prevYear(input$water_year)
+      
+      df <- VemcoReceiverDeployments %>%
+        filter(
+          GEN == GEN_click & water_year == input$water_year
+        ) %>%
+        select(
+          GPSname, VemcoSN, StartTime, EndTime
+        ) %>%
+        arrange(StartTime) %>%
+        mutate(
+          VemcoSN = as.character(VemcoSN),
+          StartTime = as.character(StartTime),
+          EndTime = as.character(EndTime)
+        )
+      
+      output$receiver_table <- renderDataTable(df)
+      
+      
+    } else {
+      print("3")
+      GEN_click = ReceiverDeployments$GEN[ReceiverDeployments$uid == p$id]
+      
+      prevRecType(input$receiverType)
+      prevYear(input$water_year)
+      
+      # Display all the GPSnames that are associated with that GEN for the given
+      # water year along with SN, StartTime, and EndTime
+      df <-  ReceiverDeployments %>%
+        filter(
+          GEN == GEN_click & water_year == input$water_year
+        ) %>%
+        arrange(StartTime) %>%
+        mutate(
+          SN = as.character(SN),
+          StartTime = as.character(StartTime),
+          #EndTime = as.character(EndTime),
+          # If the receiver is RT and its EndTime is NA make it say 'Active' instead
+          EndTime = ifelse(RecMake %in% c("ATS SR3017", "Tekno RT") & is.na(EndTime),
+                           "Active", as.character(EndTime))
+        ) %>%
+        select(
+          GPSname, SN, StartTime, EndTime
+        )
+      
+      output$receiver_table <- renderDataTable(df)
+    }
+    
+    # if (prevRecType() == "" | prevRecType() == input$receiverType) {
+    #       print("1")
+    #       if (input$receiverType == "Vemco") {
+    #         print("2")
+    # 
+    #         # Give me the GEN for the clicked marker
+    #         GEN_click = VemcoReceiverDeployments$GEN[VemcoReceiverDeployments$uid == p$id]
+    # 
+    #         prevRecType(input$receiverType)
+    # 
+    # 
+    #         df <- VemcoReceiverDeployments %>%
+    #           filter(
+    #             GEN == GEN_click & water_year == input$water_year
+    #           ) %>%
+    #           select(
+    #             GPSname, VemcoSN, StartTime, EndTime
+    #           ) %>%
+    #           arrange(StartTime) %>%
+    #           mutate(
+    #             VemcoSN = as.character(VemcoSN),
+    #             StartTime = as.character(StartTime),
+    #             EndTime = as.character(EndTime)
+    #           )
+    #         
+    #         output$receiver_table <- renderDataTable(df)
+    # 
+    # 
+    #       } else {
+    #         print("3")
+    #         GEN_click = ReceiverDeployments$GEN[ReceiverDeployments$uid == p$id]
+    # 
+    #         prevRecType(input$receiverType)
+    # 
+    #         # Display all the GPSnames that are associated with that GEN for the given
+    #         # water year along with SN, StartTime, and EndTime
+    #        df <-  ReceiverDeployments %>%
+    #           filter(
+    #             GEN == GEN_click & water_year == input$water_year
+    #           ) %>%
+    #           arrange(StartTime) %>%
+    #           mutate(
+    #             SN = as.character(SN),
+    #             StartTime = as.character(StartTime),
+    #             #EndTime = as.character(EndTime),
+    #             # If the receiver is RT and its EndTime is NA make it say 'Active' instead
+    #             EndTime = ifelse(RecMake %in% c("ATS SR3017", "Tekno RT") & is.na(EndTime),
+    #                              "Active", as.character(EndTime))
+    #           ) %>%
+    #           select(
+    #             GPSname, SN, StartTime, EndTime
+    #           )
+    #        
+    #        output$receiver_table <- renderDataTable(df)
+    #       }
+    # } else {
+    #   print("4")
+    #   prevRecType(input$receiverType)
+    # }
+    
   })
   
+  # If user switches receiver type display an empty table
+  observeEvent(input$receiverType, {
+    if (!is_empty(prevRecType()) & input$receiverType != prevRecType()) {
+      print("input != prev")
+      df <- datatable(
+        data.frame(GPSname = NA, 
+        SN = NA, 
+        StartTime = NA, 
+        EndTime = NA)
+      )
+      
+      output$receiver_table <- renderDataTable(df)
+      
+    }
+  })
+  
+  # If user switches year display an empty table
+  observeEvent(input$water_year, {
+    if (!is_empty(prevYear()) & input$water_year != prevYear()) {
+      print("input != prev")
+      df <- datatable(
+        data.frame(GPSname = NA, 
+                   SN = NA, 
+                   StartTime = NA, 
+                   EndTime = NA)
+      )
+      
+      output$receiver_table <- renderDataTable(df)
+      
+    }
+  })
+  
+
   
   
   # Hydrology  --------------------------------------------------
@@ -618,7 +738,7 @@ server <- function(input, output, session) {
     )
     
     # Bring in a Sacramento River shapefile
-    rivers <- st_read("C:/Users/Tombo/Google Drive/UCSC/R/Shiny/data/GIS/sac_river_dissolve.shp")
+    rivers <- st_read("./data/GIS/sac_river_dissolve.shp")
     # Transform datum
     rivers <- st_transform(rivers, crs = '+proj=longlat +datum=WGS84')
     # Need to drop z dimension: https://gis.stackexchange.com/questions/253898/adding-a-linestring-by-st-read-in-shiny-leaflet
@@ -1126,150 +1246,76 @@ server <- function(input, output, session) {
 
 # Survival ----------------------------------------------------------------
 
-  # Takes user selected studyIDs and retrieves data from ERDDAP
-  gtVar <-  reactive({
-    req(input$survival_datasets)
-    
-    waiter$show()
-    
-    # List of studyIDs to query for
-    studyids <- input$survival_datasets
-    
-    # Directory of detection files
-    files <- list.files("./data/detections/", full.names = T)
-    
-    # Function to read in appropriate csv by given studyID
-    read_detects_files <- function(studyID) {
-      file <- files[str_detect(files, studyID)]
-      detections <- read_csv(file)
-    }
-
-    # Read all studyID CSVs from input and bind together
-    lapply(studyids, read_detects_files) %>% 
-      bind_rows() %>% 
-      left_join(
-        TaggedFish %>% 
-          select(FishID = fish_id, Length = fish_length, Weight = fish_weight),
-        by = "FishID"
-      ) %>% 
-      rename(StudyID = studyID)
-
-    
-    # # Basic set up for RERDDAP 
-    # my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-    # JSATSinfo <- info('FED_JSATS_detects', url = my_url)
-    # 
-    # # Function that accepts a studyid and calls tabledap, allows repeated calls since
-    # # You can not simply do an %in% query
-    # get_erddap <- function(studyid) {
-    #   tabledap(JSATSinfo,
-    #            fields = c('study_id',  'fish_id', 'fish_length', 'fish_weight', 
-    #                       'receiver_general_location', 'receiver_region'),
-    #            paste0('study_id=', '"',studyid, '"'),
-    #            url = my_url
-    #   )
-    # }
-    # 
-    # # Retreive ERDDAP data with list of user selected studyIDs, bind together and get distinct rows
-    # df<- lapply(studyids, get_erddap) %>% 
-    #   bind_rows() %>% 
-    #   distinct()
-    
+  # Synchronize studyID selection between tabs
+  # https://stackoverflow.com/questions/44516768/r-shiny-synchronize-filters-on-multiple-tabs
+  studyIDSelect <- reactiveVal("")  
+  
+  output$cumSurvSelect <- renderUI({
+    selectInput(inputId = "id1", 
+                label = "Select", 
+                choices = survivalStudyIDs, 
+                selected = studyIDSelect())
   })
   
-  output$gt_output <- render_gt({
-
-    detections <- gtVar()
-    # Format the GT table
-    make_gt_table <- function(x) {
-      
-      release <- TaggedFish %>% 
-        filter(study_id %in% input$survival_datasets) %>% 
-        mutate(k_factor = 100 * (fish_weight / (fish_length/10)^3)) %>% 
-        group_by(study_id) %>% 
-        summarise(
-          count = n_distinct(fish_id),
-          Length = mean(fish_length),
-          Weight = mean(fish_weight),
-          Condition = mean(k_factor)
-        )
-      
-      detects <- detections %>% 
-        filter(GEN %in% c("I80-50_Br", "BeniciaE", "BeniciaW", "GoldenGateE", "GoldenGateW")) %>% 
-        mutate(
-          GEN = ifelse(GEN == "GoldenGateE", "GoldenGate", GEN),
-          GEN = ifelse(GEN == "GoldenGateW", "GoldenGate", GEN),
-          GEN = ifelse(GEN == "BeniciaE", "Benicia", GEN),
-          GEN = ifelse(GEN == "BeniciaW", "Benicia", GEN),
-          GEN = ifelse(GEN == "I80-50_Br", "I80", GEN)
-        ) %>% 
-        select(StudyID, FishID, GEN) %>% 
-        distinct() %>% 
-        group_by(StudyID, GEN) %>% 
-        summarise(
-          count = n()
-        ) 
-      
-      # Transform data so that each GEN is a column and unique detects is the value
-      detects <- pivot_wider(detects, names_from = "GEN", values_from = "count")
-      detects <- detects %>% select(StudyID, I80, Benicia, GoldenGate)
-      
-      
-      summary <- release %>% 
-        left_join(detects, by = c("study_id" = "StudyID"))
-      
-      summary %>% 
-        gt(rowname_col = "study_id") %>% 
-        tab_header(
-          title = "Minimum Survival Summary"
-        ) %>% 
-        tab_stubhead(label = md("**Study Group**")) %>% # md() wrapper allows text styling with MarkDown
-        tab_footnote(
-          footnote = "Mean values",
-          cells_column_labels(columns = c(2, 3, 4))
-        ) %>% 
-        cols_label(
-          count = "Fish Tagged",
-          Condition = "K Factor",
-          I80 = "Fish detected at I-80 Bridge",
-          Benicia = "Fish detected at Benicia",
-          GoldenGate = "Fish detected at Golden Gate"
-        ) %>% 
-        fmt_number(
-          columns = vars(Length, Weight, Condition),
-          decimals = 2
-        )
-    }
-    
-    # Make a GT table using the reactive function gtVar
-    make_gt_table(gtVar())
+  output$reachSurvSelect <- renderUI({
+    selectInput(inputId = "id2", 
+                label = "Select", 
+                choices = survivalStudyIDs, 
+                selected = studyIDSelect())
+  })
+  
+  observeEvent(input$id2,{
+    studyIDSelect(input$id2)
+  })
+  
+  observeEvent(input$id1,{
+    studyIDSelect(input$id1)
   })
   
   # Reactive expression for cumulative survival input
   cumsurvivalVar<-  reactive({
-    req(input$cumsurvival_datasets)
+    req(studyIDSelect())
     
-    name <- input$cumsurvival_datasets
+    name <- studyIDSelect()
     
-    file <- list.files("./Survival/outputs/Cumulative Survival", name, full.names = T)
-    read_csv(file)
+    file <- list.files("./Survival/Cumulative Survival", name, full.names = T)
+    df <- read_csv(file)
+    
+    df %>% 
+      mutate_at(c("cum.phi", "cum.phi.se", "LCI", "UCI"), round, digits = 3) %>% 
+      mutate(
+        RKM = round(RKM), digits = 2,
+        id = seq.int(nrow(df))
+      ) %>% 
+      dplyr::rename(
+        Survival = cum.phi,
+        SE = cum.phi.se,
+        Count = count
+
+      )
   })
   
   output$plotly_survival_output <- renderPlotly({
-    # plot <- ggplot(data = cumsurvivalVar(), mapping = aes(x = RKM, y = cum.phi, color = StudyID)) +
-    #   geom_point() +
-    #   geom_line() +
-    #   scale_x_reverse()
     
-    plot_ly(cumsurvivalVar(), x = ~RKM, y = ~cum.phi, color = ~StudyID, type = 'scatter', mode = 'lines+markers',
+    df <- cumsurvivalVar()
+    
+    df %>% 
+    plot_ly(x = ~RKM, y = ~Survival, type = 'scatter', mode = 'lines+markers',
             hoverinfo = 'text',
-            text = ~paste('</br> cum.phi: ', cum.phi,
+            text = ~paste('</br> Survival: ', Survival,
                           '</br> LCI: ', LCI,
                           '</br> UCI: ', UCI,
                           '</br> GEN: ', GEN,
-                          '</br> RKM: ', RKM,
-                          '</br> Raw number of fish to site: ', n_fish
-                          )) %>% 
+                          '</br> GenRKM: ', RKM,
+                          '</br> Raw number of fish to site: ', Count
+                          ),
+            # https://rpubs.com/chelsea/68601
+            error_y = ~list(
+              type = "data", 
+              symmetric = FALSE, 
+              arrayminus = Survival - LCI,
+              array = UCI - Survival)) %>% 
+      layout(title = paste0("Cumulative Survival for ", studyIDSelect())) %>%
       layout(xaxis = list(autorange = "reversed",
                           showline = FALSE,
                           zeroline = FALSE)) %>% 
@@ -1277,6 +1323,422 @@ server <- function(input, output, session) {
                           zeroline = FALSE))
 
   })
+  
+  
+  output$survival_map2 <- renderLeaflet({
+    
+    df <- cumsurvivalVar()
+    
+    # release <- TaggedFish %>% 
+    #   filter(study_id == input$cumsurvival_datasets) %>% 
+    #   select(release_location, release_latitude, release_longitude, 
+    #          release_river_km) %>% 
+    #   group_by(release_location, release_latitude, release_longitude, 
+    #            release_river_km) %>% 
+    #   summarise(count = n())
+
+    df %>% 
+      # filter(reach_num != 0) %>% 
+    leaflet() %>% 
+      addProviderTiles(
+        providers$Stamen.Terrain, group = "Stamen Terrain",
+        options = providerTileOptions(noWrap = TRUE)) %>% 
+      addProviderTiles(
+        providers$Stamen.TonerLite, group = "Stamen Toner Lite",
+        options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(
+        providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
+        options = providerTileOptions(noWrap = TRUE)) %>%
+      addMarkers(
+        ~GenLon, ~GenLat, 
+        layerId = as.character(df$id),
+        popup = paste0( "<b>Receiver Location: </b>", 
+                        df$GEN,
+                        "</br>",
+                        "<b>RKM: </b>", 
+                        df$RKM,
+                        "</br>",
+                        "<b>Survival: </b>", 
+                        df$Survival,
+                        "</br>",
+                        "<b># Fish: </b>",
+                        df$Count
+        ),
+        label = ~GEN
+      ) %>% 
+      # addMarkers(
+      #   data = release,
+      #   lng = ~release_longitude, 
+      #   lat = ~release_latitude, 
+      #   popup = paste0( "<b>Release Location: </b>"
+      #                   , release$release_location
+      #                   , "<br>"
+      #                   , "<b># Fish Tagged: </b>"
+      #                   , release$Count
+      #                   
+      #   ),
+      #   label = ~release_location,
+      #   icon = makeIcon(
+      #     iconUrl = "starred.png",
+      #     iconWidth = 25,
+      #     iconHeight = 25
+      #   )
+      # ) %>% 
+      addLayersControl(
+        baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
+        options = layersControlOptions(collapsed = TRUE)
+      )
+  })
+  
+  output$cumSurvDT <- renderDataTable({
+    dat <- cumsurvivalVar() %>% 
+      select(GEN, RKM, Region, Survival, LCI, UCI, Count, id)
+    
+    datatable(dat, selection = "single", extensions = 'Buttons',
+              options=list(stateSave = TRUE,
+                           dom = 'Bfrtip',
+                           buttons =
+                             list('copy', 'print', list(
+                               extend = 'collection',
+                               buttons = list(
+                                 list(extend = 'csv', 
+                                      filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                                      header = TRUE),
+                                 list(extend = 'excel', filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                                      title = paste0(studyIDSelect(), "_cumulative_survival"),
+                                      header = TRUE),
+                                 list(extend = 'pdf', filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                                      title = paste0(studyIDSelect(), "_cumulative_survival"),
+                                      header = TRUE)),
+                               text = 'Download'
+                             )),
+                           rownames = FALSE))
+  })
+  
+  # to keep track of previously selected row
+  prev_row <- reactiveVal()
+  
+  # new icon style
+  my_icon = makeAwesomeIcon(icon = 'flag', markerColor = 'red', iconColor = 'white')
+  
+  # https://stackoverflow.com/questions/48781380/shiny-how-to-highlight-an-object-on-a-leaflet-map-when-selecting-a-record-in-a
+  observeEvent(input$cumSurvDT_rows_selected, {
+    row_selected <-  cumsurvivalVar()[input$cumSurvDT_rows_selected,]
+    proxy <- leafletProxy('survival_map2')
+    print(row_selected)
+    proxy %>%
+      addAwesomeMarkers(
+        popup = paste0( "<b>Receiver Location: </b>", 
+                        row_selected$GEN,
+                        "</br>",
+                        "<b>RKM: </b>", 
+                        row_selected$RKM,
+                        "</br>",
+                        "<b>Survival: </b>", 
+                        row_selected$Survival,
+                        "</br>",
+                        "<b># Fish: </b>",
+                        row_selected$Count
+        ),
+        label = row_selected$GEN,
+        layerId = as.character(row_selected$id),
+        lng=row_selected$GenLon,
+        lat=row_selected$GenLat,
+        icon = my_icon)
+    
+    # Reset previously selected marker
+    if(!is.null(prev_row()))
+    {
+      proxy %>%
+        addMarkers(popup=as.character(prev_row()$GEN), 
+                   layerId = as.character(prev_row()$id),
+                   lng=prev_row()$GenLon, 
+                   lat=prev_row()$GenLat)
+    }
+    # set new value to reactiveVal 
+    prev_row(row_selected)
+  })
+  
+  observeEvent(input$survival_map2_marker_click, {
+    clickId <- input$survival_map2_marker_click$id
+    print(clickId)
+    dataTableProxy("cumSurvDT") %>%
+      selectRows(which(cumsurvivalVar()$id == clickId)) %>%
+      selectPage(which(input$cumSurvDT_rows_all == clickId) %/% input$cumSurvDT_state$length + 1)
+  })
+  
+  # Reset markers when switching from table view to plot view
+  observeEvent(input$cumsurvival_radio, {
+    # Reset previously selected marker
+    if(!is.null(prev_row()) & input$cumsurvival_radio == "Plot")
+    {
+      proxy <- leafletProxy('survival_map2')
+      proxy %>%
+        addMarkers(popup=as.character(prev_row()$GEN), 
+                   layerId = as.character(prev_row()$id),
+                   lng=prev_row()$GenLon, 
+                   lat=prev_row()$GenLat)
+    }
+  })
+  
+  # Reactive expression for reach survival input
+  reachSurvVar<-  reactive({
+    req(studyIDSelect())
+    
+    name <- studyIDSelect()
+    
+    file <- list.files("./Survival/Reach Survival Per 10km", name, full.names = T)
+    df <- read_csv(file)
+    
+    df %>% 
+      mutate_at(c("estimate", "se", "lcl", "ucl"), round, digits = 3) %>% 
+      mutate_at(c("rkm_start", "rkm_end"), round, digits = 2) %>% 
+      mutate(id = seq.int(nrow(df))) %>% 
+      rename(
+        Survival = estimate,
+        SE = se,
+        LCI = lcl,
+        UCI = ucl
+      )
+  })
+  
+  output$reachSurvMap <- renderLeaflet({
+    
+    df <- reachSurvVar()
+    
+    # release <- TaggedFish %>% 
+    #   filter(study_id == input$reachSurvInput) %>% 
+    #   select(release_location, release_latitude, release_longitude, 
+    #          release_river_km) %>% 
+    #   group_by(release_location, release_latitude, release_longitude, 
+    #            release_river_km) %>% 
+    #   summarise(count = n())
+    
+    df %>% 
+      # filter(reach_num != 0) %>% 
+      leaflet() %>% 
+      addProviderTiles(
+        providers$Stamen.Terrain, group = "Stamen Terrain",
+        options = providerTileOptions(noWrap = TRUE)) %>% 
+      addProviderTiles(
+        providers$Stamen.TonerLite, group = "Stamen Toner Lite",
+        options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(
+        providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
+        options = providerTileOptions(noWrap = TRUE)) %>%
+      addMarkers(
+        ~GenLon, ~GenLat, 
+        layerId = df$id,
+        popup = paste0( "<b>Reach: </b>", 
+                        df$reach_start, " to ", df$reach_end,
+                        "</br>",
+                        "<b>RKM: </b>", 
+                        df$rkm_start, " to ", df$rkm_end,
+                        "</br>",
+                        "<b>Survival: </b>", 
+                        df$Survival,
+                        "</br>",
+                        "<b># Fish at reach start: </b>",
+                        df$count_at_start,
+                        "</br>",
+                        "<b># Fish at reach end: </b>",
+                        df$count_at_end
+        ),
+        label = ~Reach
+      ) %>% 
+      # addMarkers(
+      #   data = release,
+      #   lng = ~release_longitude, 
+      #   lat = ~release_latitude, 
+      #   popup = paste0( "<b>Release Location: </b>"
+      #                   , release$release_location
+      #                   , "<br>"
+      #                   , "<b># Fish Tagged: </b>"
+      #                   , release$count
+      #                   
+      #   ),
+      #   label = ~release_location,
+      #   icon = makeIcon(
+      #     iconUrl = "starred.png",
+      #     iconWidth = 25,
+      #     iconHeight = 25
+      #   )
+      # ) %>% 
+      addLayersControl(
+        baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
+        options = layersControlOptions(collapsed = TRUE)
+      )
+  })
+  
+  output$reachSurvPlotly <- renderPlotly({
+    
+    name <- studyIDSelect()
+    df <- reachSurvVar()
+    
+    df %>% 
+      mutate(reach_end = factor(reach_end, levels = reach_end)) %>% 
+      plot_ly(x = ~reach_end, y = ~Survival, type = 'scatter', mode = 'markers',
+              hoverinfo = 'text',
+              text = ~paste('</br> Survival: ', Survival,
+                            '</br> LCI: ', LCI,
+                            '</br> UCI: ', UCI,
+                            '</br> Reach: ', paste0(reach_start, " to ", reach_end),
+                            '</br> RKM: ', paste0(rkm_start, " to " , rkm_end),
+                            '</br> Count Start: ', count_at_start,
+                            '</br> Count End: ', count_at_end
+              ),
+              error_y = ~list(
+                type = 'data',
+                symmetric = FALSE,
+                array = UCI-Survival,
+                arrayminus = Survival-LCI)
+      ) %>% 
+      layout(title = paste0("Reach Survival for ", name)) %>% 
+      layout(xaxis = list(showline = FALSE,
+                          zeroline = FALSE,
+                          title = "Receiver Location")) %>% 
+      layout(yaxis = list(showline = FALSE,
+                          zeroline = FALSE,
+                          title = "Survival per 10km"))
+    
+  })
+  
+  output$reachSurvDT <- renderDataTable({
+    dat <- reachSurvVar() %>% 
+      select('Reach Start' = reach_start, 'Reach End' = reach_end, 
+             'RKM Start' = rkm_start, 'RKM End' = rkm_end, Region, 
+             Survival, LCI, UCI, 'Count Start' = count_at_start,
+             'Count End' = count_at_end, id)
+    
+    datatable(dat, selection = "single", extensions = 'Buttons',
+              options=list(stateSave = TRUE,
+                           dom = 'Bfrtip',
+                           buttons =
+                             list('copy', 'print', list(
+                               extend = 'collection',
+                               buttons = list(
+                                 list(extend = 'csv', filename = studyIDSelect()),
+                                 list(extend = 'excel', filename = studyIDSelect()),
+                                 list(extend = 'pdf', filename = studyIDSelect())),
+                               text = 'Download'
+                             )),
+              rownames = FALSE))
+  })
+  
+  # to keep track of previously selected row
+  prev_row2 <- reactiveVal()
+  
+  observeEvent(input$reachSurvDT_rows_selected, {
+    row_selected <-  reachSurvVar()[input$reachSurvDT_rows_selected,]
+    proxy <- leafletProxy('reachSurvMap')
+    print(row_selected)
+    proxy %>%
+      addAwesomeMarkers(
+        popup = paste0( "<b>Reach: </b>", 
+                        row_selected$reach_start, " to ", row_selected$reach_end,
+                        "</br>",
+                        "<b>RKM: </b>", 
+                        row_selected$rkm_start, " to ", row_selected$rkm_end,
+                        "</br>",
+                        "<b>Survival: </b>", 
+                        row_selected$Survival,
+                        "</br>",
+                        "<b># Fish at reach start: </b>",
+                        row_selected$count_at_start,
+                        "</br>",
+                        "<b># Fish at reach end: </b>",
+                        row_selected$count_at_end
+        ),
+        label = row_selected$Reach,
+        layerId = as.character(row_selected$id),
+        lng=row_selected$GenLon,
+        lat=row_selected$GenLat,
+        icon = my_icon)
+    
+    # Reset previously selected marker
+    if(!is.null(prev_row2()))
+    {
+      print('prevrow2')
+      print(prev_row2)
+      proxy %>%
+        addMarkers(popup = paste0( "<b>Reach: </b>", 
+                                   prev_row2()$reach_start, " to ", prev_row2()$reach_end,
+                                   "</br>",
+                                   "<b>RKM: </b>", 
+                                   prev_row2()$rkm_start, " to ", prev_row2()$rkm_end,
+                                   "</br>",
+                                   "<b>Survival: </b>", 
+                                   prev_row2()$Survival,
+                                   "</br>",
+                                   "<b># Fish at reach start: </b>",
+                                   prev_row2()$count_at_start,
+                                   "</br>",
+                                   "<b># Fish at reach end: </b>",
+                                   prev_row2()$count_at_end
+        ), 
+        layerId = as.character(prev_row2()$id),
+        lng=prev_row2()$GenLon, 
+        lat=prev_row2()$GenLat)
+    }
+    # set new value to reactiveVal 
+    prev_row2(row_selected)
+  })
+  
+  observeEvent(input$reachSurvMap_marker_click, {
+    clickId <- input$reachSurvMap_marker_click$id
+    print(input$reachSurvMap_marker_click)
+    dataTableProxy("reachSurvDT") %>%
+      selectRows(which(reachSurvVar()$id == clickId)) %>%
+      selectPage(which(input$reachSurvDT_rows_all == clickId) %/% input$reachSurvDT_state$length + 1)
+  })
+  
+  # Reset markers when switching from table view to plot view
+  observeEvent(input$reachSurvRadio, {
+    # Reset previously selected marker
+    if(!is.null(prev_row2()) & input$reachSurvRadio == "Plot")
+    {
+      proxy <- leafletProxy('reachSurvMap')
+      proxy %>%
+        addMarkers(popup = paste0( 
+          "<b>Survival: </b>", 
+          prev_row2()$Survival,
+          "<b>LCI: </b>", 
+          prev_row2()$LCI,
+          "<b>UCI: </b>", 
+          prev_row2()$UCI,
+          "</br>",
+          "<b>Reach: </b>", 
+          paste0(prev_row2()$reach_start, ' to ', prev_row2()$reach_end),
+          "</br>",
+          "<b>RKM: </b>", 
+          paste0(prev_row2()$rkm_start, ' to ', prev_row2()$rkm_end),
+          "</br>",
+          "<b># Count Start: </b>",
+          prev_row2()$count_at_start,
+          "</br>",
+          "<b># Count End: </b>",
+          prev_row2()$count_at_end), 
+          layerId = as.character(prev_row2()$id),
+          lng=prev_row2()$GenLon, 
+          lat=prev_row2()$GenLat)
+    }
+  })
+  
+  # output$reachSurvGT <- render_gt({
+  #   
+  #   df <- reachSurvVar()
+  #   
+  #   df %>% 
+  #     select('Reach Start' = reach_start, "Reach End" = reach_end, 
+  #            "RKM Start" = rkm_start, "RKM End" = rkm_end, Region, Survival = estimate, 
+  #            LCI = lcl, UCI = ucl, "Count Start" = count_at_start, "Count End" = count_at_end) %>% 
+  #     gt() %>%
+  #     tab_header(
+  #       title = "Reach Survival",
+  #       subtitle = input$reachSurvInput
+  #     )
+  #   
+  # })
   
   
 
@@ -1433,5 +1895,6 @@ server <- function(input, output, session) {
   })  
   
 }
+
 
 shinyApp(ui = ui, server = server)

@@ -20,8 +20,8 @@ library(rerddap) # ERDDAP data retrievals
 library(slickR) # JS image carousel
 library(waiter) # Loading animations
 library(httr) # Check HTTP status for CDEC/ERDDAP
-library(vroom)
-library(sf)
+library(vroom) # Fastest way to read csv
+library(sf) # To display gis layers
 library(DT)
 library(profvis)
 
@@ -217,13 +217,12 @@ end <- Sys.time()
 # UI ----------------------------------------------------------------------
 
 ui <- fluidPage(theme = shinytheme("flatly"),
-  use_waiter(),
   use_waitress(),
   navbarPage("Central Valley Enhanced Acoustic Tagging Project",
              tabPanel("Background", 
                       mainPanel(
-                        uiOutput("background"),
-                        slickROutput("slick_output", width = '500px', height = '500px')
+                        uiOutput("background")#,
+                        #slickROutput("slick_output", width = '500px', height = '500px')
                       )
              ),
              tabPanel("Receiver Deployments",
@@ -392,9 +391,6 @@ ui <- fluidPage(theme = shinytheme("flatly"),
 # Server ------------------------------------------------------------------
 
 server <- function(input, output, session) {
-  
-  waiter <- Waiter$new(html = spin_wandering_cubes(), id = c("plotly_plot", "time_of_day_plot",
-                                                             "gt_output"))
   
   waitress <- Waitress$new("#background", infinite = T, hide_on_render = T)
 
@@ -903,8 +899,6 @@ server <- function(input, output, session) {
   taggedfishVar <-  reactive({
     req(input$data_explorer_datasets)
     
-    #waiter$show()
-    
     # List of studyIDs to query for
     studyids <- input$data_explorer_datasets
     
@@ -1005,8 +999,6 @@ server <- function(input, output, session) {
   # the time step animation
   timeofdayVar<-  reactive({
     req(input$time_of_day_input)
-    
-    waiter$show()
     
     # Directory of detection files
     files <- list.files("./data/detections/", full.names = T)
@@ -1115,7 +1107,7 @@ server <- function(input, output, session) {
         text = element_text(size = 15),
         # Make caption text small and left justify
         plot.caption = element_text(size = 10, hjust = 0),
-        plot.margin = margin(b = 20)
+        plot.margin = margin(l = 20, b = 20)
       )
     
     if (input$time_of_day_radio == "By GEN") {
@@ -1638,8 +1630,6 @@ server <- function(input, output, session) {
   # Takes user selected studyIDs and retrieves data from ERDDAP
   movementVar <-  reactive({
     req(input$movement_dataset)
-    
-    waiter$show()
     
     # List of studyIDs to query for
     studyids <- input$movement_dataset

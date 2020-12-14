@@ -1,6 +1,3 @@
-
-start <- Sys.time()
-
 library(shiny)
 library(shinydashboard) # shiny tabs
 library(shinythemes)
@@ -17,7 +14,7 @@ library(suncalc) # getting sunset sunrise times
 library(arsenal) # nice summary stats tables
 library(gt) # fancy tables
 library(rerddap) # ERDDAP data retrievals
-library(slickR) # JS image carousel
+#library(slickR) # JS image carousel
 library(waiter) # Loading animations
 library(httr) # Check HTTP status for CDEC/ERDDAP
 library(vroom) # Fastest way to read csv
@@ -302,11 +299,11 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                     choices = studyid_list
                                     ),
                         radioButtons("time_of_day_radio", "Choose all detections or by receiver GEN",
-                                     c("All Detections", "By GEN")
+                                     c("All Detections", "By General Location")
                         ),
                         conditionalPanel(
-                          condition = "input.time_of_day_radio == 'By GEN'",
-                          selectInput("time_of_day_GEN", "Select a GEN",
+                          condition = "input.time_of_day_radio == 'By General Location'",
+                          selectInput("time_of_day_GEN", "Select a General Location",
                                       "")
                         ),
                         plotlyOutput("time_of_day_plot"),
@@ -449,11 +446,11 @@ server <- function(input, output, session) {
     })
   })
   
-  output$slick_output <- renderSlickR({
-    imgs <- list.files("./photos/", full.names = TRUE)
-    slickR(imgs, width = '500px', height = '500px') +
-      settings(autoplay = TRUE, autoplaySpeed = 3000)
-  })
+  # output$slick_output <- renderSlickR({
+  #   imgs <- list.files("./photos/", full.names = TRUE)
+  #   slickR(imgs, width = '500px', height = '500px') +
+  #     settings(autoplay = TRUE, autoplaySpeed = 3000)
+  # })
 
   
   # Receiver Deployments --------------------------------------------------
@@ -1012,7 +1009,10 @@ server <- function(input, output, session) {
     # Read all studyID CSVs from input and bind together
     detections <- lapply(input$time_of_day_input, read_detects_files) %>% 
       bind_rows() %>% 
-      mutate(hour = hour(time))
+      mutate(
+        time_pst = with_tz(time, "US/Pacific"),
+        hour = hour(time_pst)
+      )
     
   })
 
@@ -1030,7 +1030,7 @@ server <- function(input, output, session) {
 
     # If user selected to examine time of arrivals by GEN filter the detection 
     # file by the GEN they chose
-    if (input$time_of_day_radio == "By GEN") {
+    if (input$time_of_day_radio == "By General Location") {
       filtered <- filtered %>% 
         filter(GEN == input$time_of_day_GEN)
     }
@@ -1085,20 +1085,29 @@ server <- function(input, output, session) {
     latest_sunset <- hour(latest_sr_ss$sunset) + 
       (minute(latest_sr_ss$sunset)/60) + (second(latest_sr_ss$sunset)/3600)
     
-    # Convert hour to factor and give it specific levels, so that it will appear 
-    # as 12:23, 0:11 on the x-axis
-    hour_freq$hour <- factor(hour_freq$hour, levels = c(12:23, 0:11))
+    # # Convert hour to factor and give it specific levels, so that it will appear 
+    # # as 12:23, 0:11 on the x-axis
+    # hour_freq$hour <- factor(hour_freq$hour, levels = c(12:23, 0:11))
+    
+    hour_freq$hour <- factor(hour_freq$hour, levels = c(0:23))
     
     # Create bar plot to show proportion of detections by hour
     p <- ggplot(data = hour_freq, mapping = aes(x = hour, y = percent_pass)) +
-      # Add rectangle representing "nighttime", using the earliest sunrise and earliest sunset values, had to use 
-      # ymax = 999999 because plotly won't take Inf
-      geom_rect(data=hour_freq, aes(NULL,NULL,xmin=earliest_sunrise,xmax=earliest_sunset),
+      # # Add rectangle representing "nighttime", using the earliest sunrise and earliest sunset values, had to use 
+      # # ymax = 999999 because plotly won't take Inf
+      # geom_rect(data=hour_freq, aes(NULL,NULL,xmin=earliest_sunrise,xmax=earliest_sunset),
+      #           ymin=0,ymax=999999, size=0.5, alpha=0.2) +
+      
+      # Have to add +1 to geom_rect and geom_vline because x-axis set as factor
+      # and is offset by 1 for some reason
+      geom_rect(aes(NULL,NULL,xmin=0,xmax=min(c(earliest_sunrise, latest_sunrise)) + 1),
+                ymin=0,ymax=999999, size=0.5, alpha=0.2) +
+      geom_rect(aes(NULL,NULL,xmin=max(c(earliest_sunset, latest_sunset)) + 1,xmax=25),
                 ymin=0,ymax=999999, size=0.5, alpha=0.2) +
       geom_col() +
       # Add lines to represent the latest sunrise and latest sunset values
-      geom_vline(xintercept = latest_sunrise, linetype = "dashed", size = 1.25) +
-      geom_vline(xintercept = latest_sunset, linetype = "dashed", size = 1.25) +
+      geom_vline(xintercept = max(c(earliest_sunrise, latest_sunrise)) + 1, linetype = "dashed", size = 1.25) +
+      geom_vline(xintercept = min(c(earliest_sunset, latest_sunset)) + 1, linetype = "dashed", size = 1.25) +
       ylab("% Smolts Passed") +
       xlab("Time of day (h)") + 
       scale_y_continuous(expand = c(0, 0)) +
@@ -1110,7 +1119,7 @@ server <- function(input, output, session) {
         plot.margin = margin(l = 20, b = 20)
       )
     
-    if (input$time_of_day_radio == "By GEN") {
+    if (input$time_of_day_radio == "By General Location") {
       # Get the GenRKM value for this GEN being examined, for use in labeling in plot
       genrkm <- detections %>% 
         filter(GEN == input$time_of_day_GEN) %>% 
@@ -1119,11 +1128,11 @@ server <- function(input, output, session) {
         unlist()
       
       p <- (p + labs(
-        title = paste0("% Smolt arrivals at ", input$time_of_day_GEN),
+        title = paste0("% Fish arrivals at ", input$time_of_day_GEN),
         subtitle = paste0("GenRKM = (", genrkm, ")")))
     } else {
       p <- (p + labs(
-        title = "% Smolt arrivals"))
+        title = "% Fish arrivals"))
     }
     
     ggplotly(p)
@@ -1140,7 +1149,7 @@ server <- function(input, output, session) {
     earliest_date <- as.Date(min(detections$time))
     latest_date <- as.Date(max(detections$time))
     
-    paste0("The histogram displays the frequency of smolt detections as a function of hour of day. The gray box represents \nhours of nighttime (sunset to sunrise) at the earliest date of detections (", earliest_date, "). The dotted lines represent \nhours of nighttime at the latest date of detections (", latest_date, ").")
+    paste0("The histogram displays the frequency of fish detections as a function of hour of day. The gray box represents \nhours of nighttime (sunset to sunrise) at the earliest date of detections (", earliest_date, "). The dotted lines represent \nhours of nighttime at the latest date of detections (", latest_date, ").")
   })
   
 

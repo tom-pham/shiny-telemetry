@@ -16,11 +16,10 @@ library(gt) # fancy tables
 library(rerddap) # ERDDAP data retrievals
 #library(slickR) # JS image carousel
 library(waiter) # Loading animations
-library(httr) # Check HTTP status for CDEC/ERDDAP
+# library(httr) # Check HTTP status for CDEC/ERDDAP
 library(vroom) # Fastest way to read csv
 library(sf) # To display gis layers
 library(DT)
-library(profvis)
 
 # Global ------------------------------------------------------------------
 
@@ -147,7 +146,7 @@ studyid_list <- c("BC_Jumpstart_2019", "CNFH_FMR_2019", "ColemanFall_2012",
                   "Winter_H_2017", "Winter_H_2018", "Winter_H_2019")
 
 survivalStudyIDs <- files <- unlist(strsplit(
-  list.files("./Survival/Reach Survival Per 10km"), "_reach_survival.csv"))
+  list.files("./data/Survival/Reach Survival Per 10km"), "_reach_survival.csv"))
 
 
 ## Load Hydrology data from CDEC
@@ -210,7 +209,6 @@ if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
 
 cdec_stations <- vroom("./data/cdec_stations.csv")
 
-end <- Sys.time()
 # UI ----------------------------------------------------------------------
 
 ui <- fluidPage(theme = shinytheme("flatly"),
@@ -1108,7 +1106,7 @@ server <- function(input, output, session) {
       # Add lines to represent the latest sunrise and latest sunset values
       geom_vline(xintercept = max(c(earliest_sunrise, latest_sunrise)) + 1, linetype = "dashed", size = 1.25) +
       geom_vline(xintercept = min(c(earliest_sunset, latest_sunset)) + 1, linetype = "dashed", size = 1.25) +
-      ylab("% Smolts Passed") +
+      ylab("% Fish Passed") +
       xlab("Time of day (h)") + 
       scale_y_continuous(expand = c(0, 0)) +
       theme_classic() +
@@ -1149,7 +1147,7 @@ server <- function(input, output, session) {
     earliest_date <- as.Date(min(detections$time))
     latest_date <- as.Date(max(detections$time))
     
-    paste0("The histogram displays the frequency of fish detections as a function of hour of day. The gray box represents \nhours of nighttime (sunset to sunrise) at the earliest date of detections (", earliest_date, "). The dotted lines represent \nhours of nighttime at the latest date of detections (", latest_date, ").")
+    paste0("The histogram displays the frequency of fish detections as a function of hour of day. The gray box represents \nhours of nighttime between the earliest sunrise and latest sunset. The dotted lines represent \nhours of nighttime between the latest sunrise and earliest sunset. The first date of detection was at: ", earliest_date, " and the last date of detection was at: ", latest_date, ".")
   })
   
 
@@ -1187,7 +1185,7 @@ server <- function(input, output, session) {
     
     name <- studyIDSelect()
     
-    file <- list.files("./Survival/Cumulative Survival", name, full.names = T)
+    file <- list.files("./data/Survival/Cumulative Survival", name, full.names = T)
     df <- read_csv(file)
     
     df %>% 
@@ -1303,38 +1301,42 @@ server <- function(input, output, session) {
     dat <- cumsurvivalVar() %>% 
       select(GEN, RKM, Region, Survival, LCI, UCI, Count, id)
     
-    datatable(dat, selection = "single", extensions = 'Buttons',
+    # Put DL button on hold till I can figure it out properly
+    datatable(dat, selection = "single", #extensions = 'Buttons',
               options=list(stateSave = TRUE,
                            dom = 'Bfrtip',
-                           buttons =
-                             list('copy', 'print', list(
-                               extend = 'collection',
-                               buttons = list(
-                                 list(extend = 'csv', 
-                                      filename = paste0(studyIDSelect(), "_cumulative_survival"),
-                                      header = TRUE),
-                                 list(extend = 'excel', filename = paste0(studyIDSelect(), "_cumulative_survival"),
-                                      title = paste0(studyIDSelect(), "_cumulative_survival"),
-                                      header = TRUE),
-                                 list(extend = 'pdf', filename = paste0(studyIDSelect(), "_cumulative_survival"),
-                                      title = paste0(studyIDSelect(), "_cumulative_survival"),
-                                      header = TRUE)),
-                               text = 'Download'
-                             )),
+                           # buttons =
+                           #   list('copy', 'print', list(
+                           #     extend = 'collection',
+                           #     buttons = list(
+                           #       list(extend = 'csv',
+                           #            filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                           #            header = TRUE),
+                           #       list(extend = 'excel', filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                           #            title = paste0(studyIDSelect(), "_cumulative_survival"),
+                           #            header = TRUE),
+                           #       list(extend = 'pdf', filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                           #            title = paste0(studyIDSelect(), "_cumulative_survival"),
+                           #            header = TRUE)),
+                           #     text = 'Download'
+                           #   )),
                            rownames = FALSE))
   })
   
   # to keep track of previously selected row
   prev_row <- reactiveVal()
   
-  # new icon style
+  # new icon style for selected rows
   my_icon = makeAwesomeIcon(icon = 'flag', markerColor = 'red', iconColor = 'white')
+  
+  # new icon style for release site
+  my_icon2 = makeAwesomeIcon(icon = 'star', markerColor = 'purple', iconColor = 'white')
+  
   
   # https://stackoverflow.com/questions/48781380/shiny-how-to-highlight-an-object-on-a-leaflet-map-when-selecting-a-record-in-a
   observeEvent(input$cumSurvDT_rows_selected, {
     row_selected <-  cumsurvivalVar()[input$cumSurvDT_rows_selected,]
     proxy <- leafletProxy('survival_map2')
-    print(row_selected)
     proxy %>%
       addAwesomeMarkers(
         popup = paste0( "<b>Receiver Location: </b>", 
@@ -1396,7 +1398,7 @@ server <- function(input, output, session) {
     
     name <- studyIDSelect()
     
-    file <- list.files("./Survival/Reach Survival Per 10km", name, full.names = T)
+    file <- list.files("./data/Survival/Reach Survival Per 10km", name, full.names = T)
     df <- read_csv(file)
     
     df %>% 
@@ -1408,7 +1410,8 @@ server <- function(input, output, session) {
         SE = se,
         LCI = lcl,
         UCI = ucl
-      )
+      ) %>% 
+      filter(reach_end != "GoldenGateW")
   })
   
   output$reachSurvMap <- renderLeaflet({
@@ -1436,7 +1439,7 @@ server <- function(input, output, session) {
         providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
         options = providerTileOptions(noWrap = TRUE)) %>%
       addMarkers(
-        ~GenLon, ~GenLat, 
+        ~GenLon_end, ~GenLat_end, 
         layerId = df$id,
         popup = paste0( "<b>Reach: </b>", 
                         df$reach_start, " to ", df$reach_end,
@@ -1455,24 +1458,23 @@ server <- function(input, output, session) {
         ),
         label = ~Reach
       ) %>% 
-      # addMarkers(
-      #   data = release,
-      #   lng = ~release_longitude, 
-      #   lat = ~release_latitude, 
-      #   popup = paste0( "<b>Release Location: </b>"
-      #                   , release$release_location
-      #                   , "<br>"
-      #                   , "<b># Fish Tagged: </b>"
-      #                   , release$count
-      #                   
-      #   ),
-      #   label = ~release_location,
-      #   icon = makeIcon(
-      #     iconUrl = "starred.png",
-      #     iconWidth = 25,
-      #     iconHeight = 25
-      #   )
-      # ) %>% 
+      # Add the release site as a unique marker
+      addAwesomeMarkers(
+        data = df %>% filter(id == 1),
+        lng = ~GenLon_start,
+        lat = ~GenLat_start,
+        popup = paste0( "<b>Release Location: </b>"
+                        , df$reach_start[1]
+                        , "<br>"
+                        , "<b># Fish Tagged: </b>"
+                        , TaggedFish %>% 
+                          filter(study_id == df$StudyID[1]) %>% 
+                          count() %>% 
+                          unlist()
+        ),
+        label = ~reach_start,
+        icon = my_icon2
+      ) %>%
       addLayersControl(
         baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
         options = layersControlOptions(collapsed = TRUE)
@@ -1519,18 +1521,19 @@ server <- function(input, output, session) {
              Survival, LCI, UCI, 'Count Start' = count_at_start,
              'Count End' = count_at_end, id)
     
-    datatable(dat, selection = "single", extensions = 'Buttons',
+    # Put DL button on hold till I can figure it out properly
+    datatable(dat, selection = "single", #extensions = 'Buttons',
               options=list(stateSave = TRUE,
                            dom = 'Bfrtip',
-                           buttons =
-                             list('copy', 'print', list(
-                               extend = 'collection',
-                               buttons = list(
-                                 list(extend = 'csv', filename = studyIDSelect()),
-                                 list(extend = 'excel', filename = studyIDSelect()),
-                                 list(extend = 'pdf', filename = studyIDSelect())),
-                               text = 'Download'
-                             )),
+                           # buttons =
+                           #   list('copy', 'print', list(
+                           #     extend = 'collection',
+                           #     buttons = list(
+                           #       list(extend = 'csv', filename = studyIDSelect()),
+                           #       list(extend = 'excel', filename = studyIDSelect()),
+                           #       list(extend = 'pdf', filename = studyIDSelect())),
+                           #     text = 'Download'
+                           #   )),
               rownames = FALSE))
   })
   
@@ -1560,8 +1563,8 @@ server <- function(input, output, session) {
         ),
         label = row_selected$Reach,
         layerId = as.character(row_selected$id),
-        lng=row_selected$GenLon,
-        lat=row_selected$GenLat,
+        lng=row_selected$GenLon_end,
+        lat=row_selected$GenLat_end,
         icon = my_icon)
     
     # Reset previously selected marker
@@ -1586,8 +1589,8 @@ server <- function(input, output, session) {
                                    prev_row2()$count_at_end
         ), 
         layerId = as.character(prev_row2()$id),
-        lng=prev_row2()$GenLon, 
-        lat=prev_row2()$GenLat)
+        lng=prev_row2()$GenLon_end, 
+        lat=prev_row2()$GenLat_end)
     }
     # set new value to reactiveVal 
     prev_row2(row_selected)

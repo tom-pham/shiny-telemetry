@@ -560,91 +560,7 @@ get.unique.detects <- function(all_aggregated){
     ungroup()
 }
 
-plot.phi <- function(phi, type, add_breaks, ylabel, xlabel, multiple, 
-                     padding = 5.5) {
-  # Plot phi outputs from Mark model
-  #
-  # Arguments:
-  #  phi: phi outputs from Mark model, must be formatted with (format_phi) first
-  #  type: "Reach" or "Region", dictates how the plot will be created
-  #  add_breaks: TRUE/FALSE whether to add vertical line breaks to represent
-  #     regions
-  #  ylabel: label for y axis
-  #  xlabel: label for x axis
-  #  multiple: TRUE/FALSE, whether there are multiple studyIDs or not
-  #  padding: leftside plot margin, default set to 5.5 good for most, but can
-  #     be adjusted of the xaxis label too long and gets cut off
-  #
-  # Return:
-  #  plot of phi with estimate and error bars representing LCI, UCI
-  
-  # Create the levels order 
-  lvls <- phi %>% select(type) %>% distinct() %>% pull()
-  
-  # # Unfortunately, this method of variable assignment doesn't work when I have
-  # # Multiple studyIDs, something to do with recycling rules in mutate()
-  # p <- phi %>%
-  #   mutate(
-  #     # !! allows me to select the column by the arg I pass (Reach or Region),
-  #     # := goes in hand with assignment via !!
-  #     # https://github.com/tidyverse/ggplot2/releases/tag/v3.0.0
-  #     !!type := factor(lvls, levels = lvls)
-  #   ) %>%
-  #   filter(reach_end != "GoldenGateW")
-  
-  # Does same thing as above in base R
-  p <- phi
-  p[type] <- factor(rep(lvls, length(studyIDs)), levels = lvls)
-  p <- p %>% 
-    # Filter out the GGE to GGW estimate, not really useful
-    filter(reach_end != "GoldenGateW")
-  
-  if (type == "Reach") {
-    # If plotting for Reach survival set angle of xaxis to be 45 degrees because
-    # they are too long
-    angle <- 45
-    hjust <- 1
-  }else {
-    angle <- 0
-    hjust <- 0.5
-  }
-  
-  if (multiple == T) {
-    ggplot(data = p, mapping = aes(x = get(type), y = estimate, group = StudyID)) +
-      geom_point(aes(color = StudyID), position = position_dodge(.5)) +
-      geom_errorbar(mapping = aes(x = get(type), ymin = lcl, ymax = ucl, 
-                                  color = StudyID),  width = .1,
-                    position = position_dodge(.5)) +
-      # Conditionally add breaks 
-      {if(add_breaks)geom_vline(xintercept = region_breaks, linetype = "dotted")} +
-      ylab(ylabel) +
-      xlab(xlabel) +
-      ## WILL NEED TO FIX THIS, ONLY WORKS FOR 2 STUDYIDS
-      scale_color_manual(values=c("#007EFF", "#FF8100")) +
-      theme_classic() +
-      theme(
-        panel.border = element_rect(colour = "black", fill=NA, size=.75),
-        axis.text.x = element_text(angle = angle, hjust = hjust),
-        plot.margin = margin(5.5, 5.5, 5.5, padding, "pt"),
-        legend.position = c(.12 ,.9)
-      )
-    
-  }  else {
-    ggplot(data = p, mapping = aes(x = get(type), y = estimate)) +
-      geom_point() +
-      geom_errorbar(mapping = aes(x= get(type), ymin = lcl, ymax = ucl), 
-                    width = .1) +
-      # Conditionally add breaks 
-      {if(add_breaks)geom_vline(xintercept = region_breaks, linetype = "dotted")} +
-      ylab(ylabel) +
-      xlab(xlabel) +
-      theme_classic() +
-      theme(
-        panel.border = element_rect(colour = "black", fill=NA, size=.75),
-        axis.text.x = element_text(angle = angle, hjust = hjust)
-      )
-  }
-}
+
 
 make.phi.table <- function(phi, standardized = T) {
   # Format phi outputs further to be ready to save as a csv
@@ -672,54 +588,7 @@ make.phi.table <- function(phi, standardized = T) {
            'Reach #' = reach_num)
 }
 
-plot.p <- function(p, multiple) {
-  # Plot p outputs from Mark model
-  #
-  # Arguments:
-  #  p: p outputs from Mark model, must be formatted with (format.p) first
-  #  multiple: T if multiple studyIDs, F is single
-  #
-  # Return:
-  #  plot of p with estimate and error bars representing LCI, UCI
-  if (multiple == F) {
-    p %>% 
-      mutate(
-        Reach = factor(reach_num, levels = p$reach_num)
-      ) %>% 
-      ggplot(mapping = aes(x = reach_num, y = estimate)) +
-      geom_point() +
-      geom_errorbar(mapping = aes(ymin = lcl, ymax = ucl)) +
-      ylab("Detection probability") +
-      xlab("Reach") +
-      scale_x_continuous(breaks = p$reach_num) +
-      theme_classic() +
-      theme(
-        panel.border = element_rect(colour = "black", fill=NA, size=.75),
-      )
-  } else { # If multiple studyIDs
-    
-    # Create the levels order 
-    lvls <- p %>% select(reach_num) %>% distinct() %>% pull()
-    
-    p %>% 
-      mutate(
-        Reach = factor(reach_num, levels = lvls)
-      ) %>% 
-      ggplot(mapping = aes(x = reach_num, y = estimate, group = StudyID)) +
-      geom_point(aes(color = StudyID), position = position_dodge(.6)) +
-      geom_errorbar(mapping = aes(x = reach_num, ymin = lcl, ymax = ucl, 
-                                  color = StudyID),  width = .1,
-                    position = position_dodge(.6)) +      
-      ylab("Detection probability") +
-      xlab("Reach") +
-      scale_x_continuous(breaks = lvls) +
-      theme_classic() +
-      theme(
-        panel.border = element_rect(colour = "black", fill=NA, size=.75),
-      )
-  }
-  
-}
+
 
 format.cum.surv <- function(cum_survival_all) {
   # Format cumulative survival outputs for plotting and table outputs

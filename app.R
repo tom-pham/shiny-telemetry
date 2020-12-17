@@ -395,51 +395,102 @@ server <- function(input, output, session) {
     withTags({
       div(class="header", checked=NA,
           h1("Background"),
-          p("Since 2012, we have been tagging juvenile salmon using JSATS (Juvenile 
-            Salmon Acoustic Telemetry System) technology to track their movement and 
-            survival over 500 river kilometers to the Pacific Ocean. Acoustic tags are 
-            implanted into the peritoneal cavity of the study fish and closed with sutures. 
-            After being released, tagged fish are presumed to exhibit a strictly downstream 
-            movement, while being detected by underwater hydrophones located throughout the 
-            riverine and estuary environments. Survival estimates are calculated by assuming 
-            a fish has died when it is not detected at downstream receivers."),
+          p("Since 2012, juvenile salmon have been tagged and tracked throughout 
+            California’s Central Valley (CCV) using Juvenile Salmon Acoustic 
+            Telemetry System (JSATS) technology. This technology allows 
+            researchers to monitor the movement and survival rates of various 
+            populations over 500 river kilometers, from Redding to the Pacific 
+            Ocean. The data compiled here is a result of the hard work and 
+            coordination between various federal and state agencies, universities, 
+            and private consultants, with the goal of conserving and restoring 
+            California’s once abundant, but now imperiled, Chinook salmon 
+            populations. This data is open access and is managed and hosted by 
+            the National Marine Fisheries Service here:", 
+            a(href="https://oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_detects.html", 
+              "https://oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_detects.html"),
+            "."),
           br(),
           h3("Receiver Deployments"),
-          p("A map of all the receivers that were deployed by water year which
-            is defined as the 12 month period beginning October 1 to September 30
-            of the following calendar year i.e. water year 2017 spans 10/1/17-9/30/18.
-            It is filtered by receiver type: autonomous (in-house customized 
-            ATS Trident receivers), Real-time (ATS SR3017, Tekno), and Vemco (VR2W, VR2AR)."),
+          p("An interactive map of acoustic receivers (JSATS, Vemco, Real-time) 
+            deployed throughout the CCV by water year, which is defined as the 
+            12 month period beginning October 1 and ending September 30 of the 
+            following calendar year (i.e. water year 2017 spans 10/1/17-9/30/18). 
+            The deployment period of individual receivers is displayed in a 
+            table below the map, once a general location is clicked. This map is 
+            useful to identify a particular site of interest, and to see when 
+            coverage existed in that area and which receiver(s) potentially 
+            recorded migrating fish. "),
           br(),
           h3("Hydrology"),
-          p("The hydrology tab shows an interactive graph of Sacramento River flows (cubic feet per second) 
-            over time at four different ", a(href="https://cdec.water.ca.gov/index.html", "CDEC"), 
-            " (California Data Exchange Center) stations: ", a(href="https://cdec.water.ca.gov/dynamicapp/staMeta?station_id=KES", "KES"), 
-            "(Keswick Reservoir), ", a(href="https://cdec.water.ca.gov/dynamicapp/staMeta?station_id=BND", "BND"), " Bend Bridge, ",
-            a(href="https://cdec.water.ca.gov/dynamicapp/staMeta?station_id=BTC", "BTC"), "(Butte City), ", 
-            a(href="https://cdec.water.ca.gov/dynamicapp/staMeta?station_id=WLK", "WLK"), " (Wilkins Slough).
-            This plot was created using the R package ", a(href="https://rstudio.github.io/dygraphs/", "dygraphs"),"."),
+          p("The hydrology of the Sacramento River is highly variable, and is 
+            largely driven by storm events and associated runoff in the winter, 
+            followed by dam controlled releases for agricultural purposes in the 
+            summer. This interactive graph of Sacramento River flows (cubic feet 
+            per second) at four different ", 
+            a(href="https://cdec.water.ca.gov/index.html", "CDEC"), 
+            " (California Data Exchange Center) stations: ", 
+            a(href="https://cdec.water.ca.gov/dynamicapp/staMeta?station_id=KES", "KES"), 
+            " (Keswick Reservoir), ", 
+            a(href="https://cdec.water.ca.gov/dynamicapp/staMeta?station_id=BND", "BND"), 
+            " (Bend Bridge), ",
+            a(href="https://cdec.water.ca.gov/dynamicapp/staMeta?station_id=BTC", "BTC"), 
+            " (Butte City), ", 
+            " and ",
+            a(href="https://cdec.water.ca.gov/dynamicapp/staMeta?station_id=WLK", "WLK"), 
+            " (Wilkins Slough), displays the annual and inter-annual variation 
+            in flows from upstream to downstream gauging stations. This plot was 
+            created using the R package ",
+            a(href="https://rstudio.github.io/dygraphs/", "dygraphs"),"."),
           br(),
           h3("Outmigration Animation"),
-          p("The Outmigration Animation tab visualizes fish outmigration using detection data over time.
-            What is represented is unique fish detections at each receiver location by day. This animation
-            was created using the R packages ", a(href="https://rstudio.github.io/leaflet/", "leaflet"),
-            "and leaflet.extras."),
+          p("The Outmigration Animation tab visualizes fish outmigration using 
+            detection data over time. Unique fish detections at each receiver 
+            location are plotted by day, and numbers of unique detections per 
+            receiver are overlaid in each point. This animation helps to 
+            visualize the movement of fish across a broad geographic landscape, 
+            and demonstrates the differences in outmigration timing across space 
+            and time among specific populations. This animation was created 
+            using the R packages  ", 
+            a(href="https://rstudio.github.io/leaflet/", "leaflet"),
+            "and ",
+            a(href="https://github.com/bhaskarvk/leaflet.extras", "leaflet.extras"),
+            "."),
           br(),
           h3("Data Explorer"),
-          p("Data explorer allows users to look at the tagged fish data individually or across different
-            study populations in a number of ways. Plots can be created interactively, choosing variables
-            to explore (length, weight), and with different plot types (boxplot, histogram, density) as 
-            well as summary tables."),
+          p("Data explorer allows users to look at the tagged fish data 
+            individually or across different study populations in a number of 
+            ways. Plots can be created interactively, choosing variables to 
+            explore (length, weight), and with different plot types (boxplot, 
+            histogram, density) as well as summary tables."),
           br(),
           h3("Time of Day"),
-          p("Time of day allows users to visually explorer behavioral differences in fish movement between
-            night and day travel. Using detection times we can look at the distribution across time for
-            an entire study group or across time by a specific receiver location."),
+          p("Time of day allows users to visually explore behavioral differences 
+            in fish movement between night and day throughout the migratory 
+            corridor. Using detection times we can look at the distribution in 
+            movement times for an entire study group, or the movement times for 
+            a specific receiver location. "),
           br(),
           h3("Survival"),
-          p("Ultimately acoustic telemetry helps us understand survival of tagged fish. Here we present
-            raw surival numbers and survival estimates created by CJS survival models in RMark.")
+          p("Survival estimates are calculated by summarizing the detection 
+            history of study populations, and assuming a fish has died when it 
+            is not detected by subsequent downstream receivers. We used a CJS 
+            survival model in RMark to estimate reach specific (survival per 10 
+            river kilometers) and cumulative (from release location to last 
+            downstream detection) survival rates. We used a simple survival model 
+            (survival and detection efficiency is a function of time) to derive 
+            these estimates. For each survival tab, a map is displayed with all 
+            receiver locations used to generate survival for each population, 
+            and a figure and table displays the estimates and associated error. 
+            The unique number of fish detected at each receiver location is also 
+            provided."),
+          br(),
+          h3("Movement"),
+          p("Fish movement is summarized by study population in a table format. 
+            For each receiver location, the minimum, median, and maximum travel 
+            time is calculated in days and kilometers per day. The number of 
+            unique fish detected at each receiver location is displayed as well. 
+            We will update this page to display travel times in an interactive 
+            plot soon, so stay tuned.")
       )
     })
   })

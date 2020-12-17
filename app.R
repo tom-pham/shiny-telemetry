@@ -396,14 +396,14 @@ server <- function(input, output, session) {
       div(class="header", checked=NA,
           h1("Background"),
           p("Since 2012, juvenile salmon have been tagged and tracked throughout 
-            California’s Central Valley (CCV) using Juvenile Salmon Acoustic 
+            California's Central Valley (CCV) using Juvenile Salmon Acoustic 
             Telemetry System (JSATS) technology. This technology allows 
             researchers to monitor the movement and survival rates of various 
             populations over 500 river kilometers, from Redding to the Pacific 
             Ocean. The data compiled here is a result of the hard work and 
             coordination between various federal and state agencies, universities, 
             and private consultants, with the goal of conserving and restoring 
-            California’s once abundant, but now imperiled, Chinook salmon 
+            California's once abundant, but now imperiled, Chinook salmon 
             populations. This data is open access and is managed and hosted by 
             the National Marine Fisheries Service here:", 
             a(href="https://oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_detects.html", 
@@ -601,7 +601,6 @@ server <- function(input, output, session) {
     p <- input$map_marker_click
     
     if (input$receiverType == "Vemco") {
-      print("2")
       
       # Give me the GEN for the clicked marker
       GEN_click = VemcoReceiverDeployments$GEN[VemcoReceiverDeployments$uid == p$id]
@@ -614,7 +613,7 @@ server <- function(input, output, session) {
           GEN == GEN_click & water_year == input$water_year
         ) %>%
         select(
-          GPSname, VemcoSN, StartTime, EndTime
+          GPSname, VemcoSN, StartTime, EndTime, GenLat, GenLon
         ) %>%
         arrange(StartTime) %>%
         mutate(
@@ -627,7 +626,6 @@ server <- function(input, output, session) {
       
       
     } else {
-      print("3")
       GEN_click = ReceiverDeployments$GEN[ReceiverDeployments$uid == p$id]
       
       prevRecType(input$receiverType)
@@ -643,89 +641,29 @@ server <- function(input, output, session) {
         mutate(
           SN = as.character(SN),
           StartTime = as.character(StartTime),
-          #EndTime = as.character(EndTime),
           # If the receiver is RT and its EndTime is NA make it say 'Active' instead
           EndTime = ifelse(RecMake %in% c("ATS SR3017", "Tekno RT") & is.na(EndTime),
                            "Active", as.character(EndTime))
         ) %>%
         select(
-          GPSname, SN, StartTime, EndTime
+          GPSname, SN, StartTime, EndTime, GenLat, GenLon
         )
       
       output$receiver_table <- renderDataTable(df)
     }
-    
-    # if (prevRecType() == "" | prevRecType() == input$receiverType) {
-    #       print("1")
-    #       if (input$receiverType == "Vemco") {
-    #         print("2")
-    # 
-    #         # Give me the GEN for the clicked marker
-    #         GEN_click = VemcoReceiverDeployments$GEN[VemcoReceiverDeployments$uid == p$id]
-    # 
-    #         prevRecType(input$receiverType)
-    # 
-    # 
-    #         df <- VemcoReceiverDeployments %>%
-    #           filter(
-    #             GEN == GEN_click & water_year == input$water_year
-    #           ) %>%
-    #           select(
-    #             GPSname, VemcoSN, StartTime, EndTime
-    #           ) %>%
-    #           arrange(StartTime) %>%
-    #           mutate(
-    #             VemcoSN = as.character(VemcoSN),
-    #             StartTime = as.character(StartTime),
-    #             EndTime = as.character(EndTime)
-    #           )
-    #         
-    #         output$receiver_table <- renderDataTable(df)
-    # 
-    # 
-    #       } else {
-    #         print("3")
-    #         GEN_click = ReceiverDeployments$GEN[ReceiverDeployments$uid == p$id]
-    # 
-    #         prevRecType(input$receiverType)
-    # 
-    #         # Display all the GPSnames that are associated with that GEN for the given
-    #         # water year along with SN, StartTime, and EndTime
-    #        df <-  ReceiverDeployments %>%
-    #           filter(
-    #             GEN == GEN_click & water_year == input$water_year
-    #           ) %>%
-    #           arrange(StartTime) %>%
-    #           mutate(
-    #             SN = as.character(SN),
-    #             StartTime = as.character(StartTime),
-    #             #EndTime = as.character(EndTime),
-    #             # If the receiver is RT and its EndTime is NA make it say 'Active' instead
-    #             EndTime = ifelse(RecMake %in% c("ATS SR3017", "Tekno RT") & is.na(EndTime),
-    #                              "Active", as.character(EndTime))
-    #           ) %>%
-    #           select(
-    #             GPSname, SN, StartTime, EndTime
-    #           )
-    #        
-    #        output$receiver_table <- renderDataTable(df)
-    #       }
-    # } else {
-    #   print("4")
-    #   prevRecType(input$receiverType)
-    # }
     
   })
   
   # If user switches receiver type display an empty table
   observeEvent(input$receiverType, {
     if (!is_empty(prevRecType()) & input$receiverType != prevRecType()) {
-      print("input != prev")
       df <- datatable(
         data.frame(GPSname = NA, 
         SN = NA, 
         StartTime = NA, 
-        EndTime = NA)
+        EndTime = NA,
+        GenLat = NA,
+        GenLon = NA)
       )
       
       output$receiver_table <- renderDataTable(df)
@@ -736,12 +674,13 @@ server <- function(input, output, session) {
   # If user switches year display an empty table
   observeEvent(input$water_year, {
     if (!is_empty(prevYear()) & input$water_year != prevYear()) {
-      print("input != prev")
       df <- datatable(
         data.frame(GPSname = NA, 
-                   SN = NA, 
-                   StartTime = NA, 
-                   EndTime = NA)
+        SN = NA, 
+        StartTime = NA, 
+        EndTime = NA,
+        GenLat = NA,
+        GenLon = NA)
       )
       
       output$receiver_table <- renderDataTable(df)

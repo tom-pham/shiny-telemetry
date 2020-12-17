@@ -687,7 +687,10 @@ plot.cum.surv <- function(cum_survival_all, add_breaks, multiple, padding = 5.5)
 }
 
 
-#### Output Reach Survival Per 10km ------------------------------------------
+#### Output survival estimates------------------------------------------
+# Run reach per 10km and cumulative survival for the studyIDs I want and output 
+# to CSV
+
 all_surv <- function(studyID) {
   
   print(studyID)

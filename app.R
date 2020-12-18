@@ -314,11 +314,13 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                  headerPanel("Select Options"),
                                  sidebarPanel(
                                    uiOutput("cumSurvSelect"),
-                                   # selectInput("cumsurvival_datasets", "Study Group",
-                                   #             choices = survivalStudyIDs),
-                                   # ### These need to be manually updated
-                                   # choices = c("ColemanFall", "ColemanLateFall", "DeerCk", "MillCk",
-                                   #             "RBDD")) #, "Sutter Bypass", "Winter"
+                                   helpText("Note: These survival results are 
+                                          preliminary and for discussion purposes 
+                                          only. Detection data has not been 
+                                          filtered for predator detections, and 
+                                          survival estimates have not been 
+                                          adjusted for any potential premature 
+                                          tag failures."),
                                    radioButtons("cumsurvival_radio", 
                                                 "View",
                                                 c("Plot", "Table")
@@ -340,11 +342,13 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                  headerPanel("Select Options"),
                                  sidebarPanel(
                                    uiOutput("reachSurvSelect"),
-                                   # selectInput("reachSurvInput", "Study Group",
-                                   #             choices = survivalStudyIDs),
-                                   # ### These need to be manually updated
-                                   # choices = c("ColemanFall", "ColemanLateFall", "DeerCk", "MillCk",
-                                   #             "RBDD")) #, "Sutter Bypass", "Winter"
+                                   helpText("Note: These survival results are 
+                                          preliminary and for discussion purposes 
+                                          only. Detection data has not been 
+                                          filtered for predator detections, and 
+                                          survival estimates have not been 
+                                          adjusted for any potential premature 
+                                          tag failures."),
                                    radioButtons("reachSurvRadio", 
                                                 "View",
                                                 c("Plot", "Table")
@@ -483,6 +487,11 @@ server <- function(input, output, session) {
             and a figure and table displays the estimates and associated error. 
             The unique number of fish detected at each receiver location is also 
             provided."),
+          br(),
+          i("*These survival results are preliminary and for discussion purposes 
+            only. Detection data has not been filtered for predator detections, 
+            and survival estimates have not been adjusted for any potential 
+            premature tag failures."),
           br(),
           h3("Movement"),
           p("Fish movement is summarized by study population in a table format. 

@@ -112,7 +112,7 @@ get_detections <- function(studyID) {
 # 
 # all_GEN_locs <- lapply(all_detections, get_GEN_locs)
 
-aggregate_GEN <- function(detections) {
+aggregate_GEN <- function(detections, reach.meta) {
   # Replace GEN in detections df according to replacelist
   #
   # Arguments:
@@ -723,7 +723,7 @@ find_multi_release_loc <- function(studyid_list) {
 
 }
 
-multi_rel__loc<- find_multi_release_loc(studyid_list)
+multi_rel_loc<- find_multi_release_loc(studyid_list)
 
 find_multi_release_date <- function(studyid_list) {
   rel_loc <- TaggedFish %>% 
@@ -739,9 +739,10 @@ multi_rel_date <- find_multi_release_date(studyid_list)
 
 
 ### Output survival estimates for multi-release location groups -------------
-studyIDs <- c("FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", "FR_Spring_2019")
+# "FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", "FR_Spring_2019" 
+# Nimbus_Fall_2018 
 
-studyID <- "FR_Spring_2013"
+studyID <- "FR_Spring_2019"
 
 detections <- get_detections(studyID)
 
@@ -765,23 +766,52 @@ reach.meta <- reach.meta %>%
       pull(max_rkm)
   )
 
+# Visually inspect receiver locations, determine is sites need to be removed
+leaflet(data = reach.meta) %>% 
+  addTiles() %>% 
+  addMarkers(lng = ~GenLon, lat = ~GenLat, label = ~GEN, 
+             labelOptions = labelOptions(noHide = T))
+
+# Based on visual inspect remove sites that don't make sense, i.e. upstream movement
+# or wrong river
+remove_list <- c("AbvTisdale", "BlwChinaBend", "KnightsLanding")
+
+reach.meta <- reach.meta %>% 
+  filter(
+    #!(GEN %in% remove_list)
+    !(Region != "Feather_R" & GenRKM > 203.46)
+  )
+
 # Identify the unique release locations
 rel_loc <- unique(detections$Rel_loc)
 
-# Run survival for each release group
-for (i in rel_loc) {
+run_multi_survival <- function(release_loc) {
+  
+  # If the current release location is not the first begin at its starting
+  # position in reach.meta
+  if (reach.meta$GenRKM[reach.meta$GEN == release_loc] < max(reach.meta$GenRKM)) {
+    reach.meta <- reach.meta %>% 
+      filter(
+        GenRKM <= reach.meta$GenRKM[reach.meta$GEN == release_loc]
+      )
+  }
+
   detects <- detections %>% 
-    filter(Rel_loc == i)
+    filter(
+      Rel_loc == release_loc,
+      GEN %in% reach.meta$GEN
+  )
   
-  aggregated <- aggregate_GEN(detects)
+  aggregated <- aggregate_GEN(detects, reach.meta)
   
-  EH <- make_EH(aggregated, release = i)
+  EH <- make_EH(aggregated, release = release_loc)
   
   inp <- create_inp(aggregated, EH)
   
   reach_surv <- get.mark.model(inp, standardized = T, multiple = F)
   reach_surv <- format_phi(reach_surv, multiple = F) %>% 
-    filter(reach_end != "GoldenGateW")
+    filter(reach_end != "GoldenGateW") %>% 
+    mutate(release = release_loc)
   
   fish_count <- get.unique.detects(aggregated)
   reach_surv <- reach_surv %>% 
@@ -792,12 +822,15 @@ for (i in rel_loc) {
     left_join(
       fish_count %>% 
         select(reach_end = GEN, count_end = count)
-    )
+    ) %>% 
+    mutate_if(is.numeric, coalesce, 0)
 }
 
+combined_surv <- lapply(rel_loc, run_multi_survival) %>% 
+  bind_rows()
 
-
-
+write_csv(combined_surv, paste0("./data/Survival/Reach Survival Per 10km/", 
+                                studyID, "_reach_survival.csv"))
 
 
 #### Output survival estimates------------------------------------------

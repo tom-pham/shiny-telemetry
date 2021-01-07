@@ -22,7 +22,8 @@ library(leaflet)
 
 my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
 JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
-TaggedFish <- tabledap(JSATSinfo, url = my_url)  
+TaggedFish <- tabledap(JSATSinfo, url = my_url) %>% 
+  as_tibble()
 
 JSATSinfo <- info('FED_JSATS_receivers', url = my_url)
 ReceiverDeployments <- tabledap(JSATSinfo, url = my_url)
@@ -166,11 +167,12 @@ aggregate_GEN <- function(detections) {
 }
 
 
-make_EH <- function(detections) {
+make_EH <- function(detections, release = unique(detections$Rel_loc)) {
   # Make an encounter history df
   #
   # Arguments:
   #  detections: a detections df
+  #  release: the release to filter the detections by
   #     
   # Return:
   #  Encounter history df. A matrix of every fish tagged for a given studyID
@@ -180,7 +182,7 @@ make_EH <- function(detections) {
   # Get earliest detection for each fish at each GEN
   min_detects <- detections %>% 
     filter(GEN %in% reach.meta.aggregate$GEN) %>% 
-    group_by(FishID, GEN, GenRKM) %>% 
+    group_by(FishID, GEN) %>% 
     summarise(
       min_time = min(time)
     ) %>% 
@@ -190,9 +192,13 @@ make_EH <- function(detections) {
   
   # Get list of all tagged fish for the studyID
   fish <- TaggedFish %>% 
-    filter(study_id == detections$StudyID[1]) %>% 
+    filter(
+      study_id == detections$StudyID[1],
+      release_location == release
+    ) %>% 
     arrange(fish_id) %>% 
-    pull(fish_id)
+    pull(fish_id) %>% 
+    unique()
   
   # Create matrix of all combinations of fish and GEN
   EH <- expand.grid(
@@ -687,6 +693,113 @@ plot.cum.surv <- function(cum_survival_all, add_breaks, multiple, padding = 5.5)
 }
 
 
+# Identify StudyIDs with multiple release locations -----------------------
+
+studyid_list <- c("BC_Jumpstart_2019", "CNFH_FMR_2019", "ColemanFall_2012", 
+                  "ColemanFall_2013", "ColemanFall_2016", "ColemanFall_2017", 
+                  "ColemanLateFall_2018", "ColemanLateFall_2019", 
+                  "ColemanLateFall_2020", "DeerCk_SH_Wild_2018", 
+                  "DeerCk_Wild 2019", "DeerCk_Wild_2017","DeerCk_Wild_2018", 
+                  "FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", 
+                  "FR_Spring_2019","MillCk_SH_Wild_2015", "MillCk_SH_Wild_2016", 
+                  "MillCk_Wild 2019", "MillCk_Wild_2013", "MillCk_Wild_2014", 
+                  "MillCk_Wild_2015", "MillCk_Wild_2016", "MillCk_Wild_2016_DS",
+                  "MillCk_Wild_2017", "MillCk_Wild_2018", "Nimbus_Fall_2016", 
+                  "Nimbus_Fall_2017", "Nimbus_Fall_2018", "RBDD_2017", "RBDD_2018", 
+                  "SB_Spring_2015", "SB_Spring_2016", "SB_Spring_2017", 
+                  "SB_Spring_2018", "SB_Spring_2019", "Winter_H_2013", 
+                  "Winter_H_2014", "Winter_H_2015", "Winter_H_2016", 
+                  "Winter_H_2017", "Winter_H_2018", "Winter_H_2019")
+
+studyID <- studyid_list[1]
+
+find_multi_release_loc <- function(studyid_list) {
+  rel_loc <- TaggedFish %>% 
+    filter(study_id %in% studyid_list) %>% 
+    select(study_id, release_location) %>% 
+    distinct() %>% 
+    group_by(study_id) %>% 
+    filter(n() > 1)
+
+}
+
+multi_rel__loc<- find_multi_release_loc(studyid_list)
+
+find_multi_release_date <- function(studyid_list) {
+  rel_loc <- TaggedFish %>% 
+    filter(study_id %in% studyid_list) %>% 
+    select(study_id, fish_release_date) %>% 
+    mutate(fish_release_date = as.Date(mdy_hms(fish_release_date))) %>% 
+    distinct() %>% 
+    group_by(study_id) %>% 
+    filter(n() > 1)
+}
+
+multi_rel_date <- find_multi_release_date(studyid_list)
+
+
+### Output survival estimates for multi-release location groups -------------
+studyIDs <- c("FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", "FR_Spring_2019")
+
+studyID <- "FR_Spring_2013"
+
+detections <- get_detections(studyID)
+
+replace_dict = list(replace_with = list(c("Chipps"),
+                                        c("Benicia")),
+                    replace_list = list(c("ChippsE", "ChippsW"),
+                                        c("BeniciaE", "BeniciaW")))
+
+reach.meta <- get.receiver.GEN(detections)
+
+# Remove Delta and Yolo sites except for Chipps, remove anything above release rkm
+reach.meta <- reach.meta %>% 
+  filter(
+    !Region %in% c("North Delta", "East Delta", "West Delta", "Yolo Bypass") |
+      GEN %in% c("ChippsE", "ChippsW"),
+    GenRKM <= TaggedFish %>% 
+      filter(study_id == studyID) %>% 
+      mutate(release_river_km = as.numeric(release_river_km)) %>% 
+      group_by(study_id) %>% 
+      summarise(max_rkm = max(release_river_km)) %>% 
+      pull(max_rkm)
+  )
+
+# Identify the unique release locations
+rel_loc <- unique(detections$Rel_loc)
+
+# Run survival for each release group
+for (i in rel_loc) {
+  detects <- detections %>% 
+    filter(Rel_loc == i)
+  
+  aggregated <- aggregate_GEN(detects)
+  
+  EH <- make_EH(aggregated, release = i)
+  
+  inp <- create_inp(aggregated, EH)
+  
+  reach_surv <- get.mark.model(inp, standardized = T, multiple = F)
+  reach_surv <- format_phi(reach_surv, multiple = F) %>% 
+    filter(reach_end != "GoldenGateW")
+  
+  fish_count <- get.unique.detects(aggregated)
+  reach_surv <- reach_surv %>% 
+    left_join(
+      fish_count %>% 
+        select(reach_start = GEN, count_start = count)
+    ) %>% 
+    left_join(
+      fish_count %>% 
+        select(reach_end = GEN, count_end = count)
+    )
+}
+
+
+
+
+
+
 #### Output survival estimates------------------------------------------
 # Run reach per 10km and cumulative survival for the studyIDs I want and output 
 # to CSV
@@ -722,13 +835,15 @@ all_surv <- function(studyID) {
   reach_surv <- format_phi(reach_surv, multiple = F) %>% 
     filter(reach_end != "GoldenGateW")
   
-  write_csv(reach_surv, paste0(studyID, "_reach_survival_per10km.csv"))
-  print(paste0(studyID, "_reach_survival_per10km.csv"))
+  write_csv(reach_surv, paste0("./data/Survival/Reach Survival per 10km/", 
+                               studyID, "_reach_survival_per10km.csv"))
+  print(paste0( studyID, "_reach_survival_per10km.csv"))
   
   cum_surv <- get_cum_survival(inp, add_release = T)
   cum_surv <- format.cum.surv(cum_surv)
   
-  write_csv(cum_surv, paste0(studyID, "_cumulative_survival.csv"))
+  write_csv(cum_surv, paste0("./data/Survival/Cumulative Survival/", 
+                             studyID, "_cumulative_survival.csv"))
   print(paste0(studyID, "_cumulative_survival.csv"))
   
   cleanup(ask = F)
@@ -737,7 +852,7 @@ all_surv <- function(studyID) {
 
 for (i in studyid_list) {
   print(i)
-  all__surv(i)
+  all_surv(i)
   print(paste0(i, "done"))
 }
 

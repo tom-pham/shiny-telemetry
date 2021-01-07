@@ -742,7 +742,7 @@ multi_rel_date <- find_multi_release_date(studyid_list)
 # "FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", "FR_Spring_2019" 
 # Nimbus_Fall_2018 
 
-studyID <- "FR_Spring_2019"
+studyID <- "FR_Spring_2013"
 
 detections <- get_detections(studyID)
 
@@ -817,17 +817,43 @@ run_multi_survival <- function(release_loc) {
   reach_surv <- reach_surv %>% 
     left_join(
       fish_count %>% 
-        select(reach_start = GEN, count_start = count)
+        select(reach_start = GEN, count_at_start = count)
     ) %>% 
     left_join(
       fish_count %>% 
-        select(reach_end = GEN, count_end = count)
+        select(reach_end = GEN, count_at_end = count)
     ) %>% 
     mutate_if(is.numeric, coalesce, 0)
+  
 }
 
 combined_surv <- lapply(rel_loc, run_multi_survival) %>% 
   bind_rows()
+
+# Rerun first release group just to restore reach.meta.aggregate to full version
+run_multi_survival(rel_loc[1])
+
+# Fix reach_num for releases after the first
+combined_surv <- combined_surv %>% 
+  rowwise() %>% 
+  mutate(
+    reach_num = ifelse(
+      release != rel_loc[1], 
+      combined_surv$reach_num[combined_surv$reach_start == reach_start 
+                              & combined_surv$release == rel_loc[1]],
+      reach_num
+    )
+  ) %>% 
+  left_join(
+    reach.meta.aggregate %>% 
+      select(GEN, GenLat_start = GenLat, GenLon_start = GenLon),
+    by = c("reach_start" = "GEN")
+  ) %>% 
+  left_join(
+    reach.meta.aggregate %>% 
+      select(GEN, GenLat_end = GenLat, GenLon_end = GenLon),
+    by = c("reach_end" = "GEN")
+  )
 
 write_csv(combined_surv, paste0("./data/Survival/Reach Survival Per 10km/", 
                                 studyID, "_reach_survival.csv"))

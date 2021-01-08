@@ -1190,7 +1190,7 @@ server <- function(input, output, session) {
     df %>% 
       mutate_at(c("cum.phi", "cum.phi.se", "LCI", "UCI"), round, digits = 3) %>% 
       mutate(
-        RKM = round(RKM), digits = 2,
+        RKM = round(RKM, digits = 2),
         id = seq.int(nrow(df))
       ) %>% 
       dplyr::rename(
@@ -1400,17 +1400,52 @@ server <- function(input, output, session) {
     file <- list.files("./data/Survival/Reach Survival Per 10km", name, full.names = T)
     df <- read_csv(file)
     
-    df %>% 
-      mutate_at(c("estimate", "se", "lcl", "ucl"), round, digits = 3) %>% 
-      mutate_at(c("rkm_start", "rkm_end"), round, digits = 2) %>% 
-      mutate(id = seq.int(nrow(df))) %>% 
-      rename(
-        Survival = estimate,
-        SE = se,
-        LCI = lcl,
-        UCI = ucl
-      ) %>% 
-      filter(reach_end != "GoldenGateW")
+    # If studyID contains multi rel loc, rearrange data to wide format
+    if(length(unique(df$release)) > 1) {
+      # df <- df %>% 
+      #   mutate_at(c("estimate", "se", "lcl", "ucl"), round, digits = 3) %>% 
+      #   mutate_at(c("rkm_start", "rkm_end"), round, digits = 2) %>% 
+      #   rename(
+      #     Survival = estimate,
+      #     SE = se,
+      #     LCI = lcl,
+      #     UCI = ucl,
+      #   ) %>% 
+      #   filter(reach_end != "GoldenGateW") %>% 
+      #   pivot_wider(
+      #     names_from = release,
+      #     values_from = c("Survival", "SE", "LCI", "UCI", "reach_num", 
+      #                     "count_start", "count_end")
+      #   ) %>% 
+      #   mutate(id = row_number())
+      
+      df <- df %>% 
+        mutate_at(c("estimate", "se", "lcl", "ucl"), round, digits = 3) %>% 
+        mutate_at(c("rkm_start", "rkm_end"), round, digits = 2) %>% 
+        mutate(id = seq.int(nrow(df))) %>% 
+        rename(
+          Survival = estimate,
+          SE = se,
+          LCI = lcl,
+          UCI = ucl
+        ) %>% 
+        filter(reach_end != "GoldenGateW")
+          
+    } else {
+      df <- df %>% 
+        mutate_at(c("estimate", "se", "lcl", "ucl"), round, digits = 3) %>% 
+        mutate_at(c("rkm_start", "rkm_end"), round, digits = 2) %>% 
+        mutate(id = seq.int(nrow(df))) %>% 
+        rename(
+          Survival = estimate,
+          SE = se,
+          LCI = lcl,
+          UCI = ucl
+        ) %>% 
+        filter(reach_end != "GoldenGateW")
+    }
+    
+
   })
   
   output$reachSurvMap <- renderLeaflet({
@@ -1485,31 +1520,97 @@ server <- function(input, output, session) {
     name <- studyIDSelect()
     df <- reachSurvVar()
     
-    df %>% 
-      mutate(reach_end = factor(reach_end, levels = reach_end)) %>% 
-      plot_ly(x = ~reach_end, y = ~Survival, type = 'scatter', mode = 'markers',
-              hoverinfo = 'text',
-              text = ~paste('</br> Survival: ', Survival,
-                            '</br> LCI: ', LCI,
-                            '</br> UCI: ', UCI,
-                            '</br> Reach: ', paste0(reach_start, " to ", reach_end),
-                            '</br> RKM: ', paste0(rkm_start, " to " , rkm_end),
-                            '</br> Count Start: ', count_at_start,
-                            '</br> Count End: ', count_at_end
-              ),
-              error_y = ~list(
-                type = 'data',
-                symmetric = FALSE,
-                array = UCI-Survival,
-                arrayminus = Survival-LCI)
-      ) %>% 
-      layout(title = paste0("Reach Survival for ", name)) %>% 
-      layout(xaxis = list(showline = FALSE,
-                          zeroline = FALSE,
-                          title = "Receiver Location")) %>% 
-      layout(yaxis = list(showline = FALSE,
-                          zeroline = FALSE,
-                          title = "Survival per 10km"))
+    # Plot differently if there is a single release vs multi
+    if(length(unique(df$release)) > 1) {
+      # Set the order of release groups
+      df$release <- factor(df$release, unique(df$release))
+      
+      p <- df %>% 
+        mutate(reach_end = factor(reach_end, levels = unique(reach_end))) %>% 
+        ggplot(mapping = aes(x = reach_end, y = Survival, group = release)) +
+        geom_point(position = position_dodge(width = 0.5), 
+                   aes(color = release,
+                       text = paste('</br> Survival: ', Survival,
+                                    '</br> LCI: ', LCI,
+                                    '</br> UCI: ', UCI,
+                                    '</br> Reach: ', paste0(reach_start, " to ", reach_end),
+                                    '</br> RKM: ', paste0(rkm_start, " to " , rkm_end),
+                                    '</br> Count Start: ', count_at_start,
+                                    '</br> Count End: ', count_at_end
+                       ))) +
+        geom_errorbar(mapping = aes(x = reach_end, ymin = LCI, ymax = UCI, 
+                                    color = release),  width = .1,
+                      position = position_dodge(.5)) +
+        scale_color_manual(values=c("#007EFF", "#FF8100")) +
+        labs(
+          title = paste0("Reach Survival for ", name),
+          x = "Receiver Location",
+          y = "Survival per 10km",
+          color = "Release"
+        ) +
+        theme_minimal() +
+        theme(
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5)
+        )
+      
+      ggplotly(p, tooltip = "text")
+    } else {
+      p <- df %>% 
+        mutate(reach_end = factor(reach_end, levels = unique(reach_end))) %>% 
+        ggplot(mapping = aes(x = reach_end, y = Survival)) +
+        geom_point(position = position_dodge(width = 0.5), 
+                   aes(text = paste('</br> Survival: ', Survival,
+                                    '</br> LCI: ', LCI,
+                                    '</br> UCI: ', UCI,
+                                    '</br> Reach: ', paste0(reach_start, " to ", reach_end),
+                                    '</br> RKM: ', paste0(rkm_start, " to " , rkm_end),
+                                    '</br> Count Start: ', count_at_start,
+                                    '</br> Count End: ', count_at_end
+                       )),
+                   color = "#007EFF") +
+        geom_errorbar(mapping = aes(x = reach_end, ymin = LCI, ymax = UCI),  
+                      width = .1, position = position_dodge(.5),
+                      color = "#007EFF") +
+        labs(
+          title = paste0("Reach Survival for ", name),
+          x = "Receiver Location",
+          y = "Survival per 10km"
+        ) +
+        theme_minimal() +
+        theme(
+          axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(hjust = 0.5)
+        )
+      
+      ggplotly(p, tooltip = "text")
+    }
+    
+    # df %>% 
+    #   mutate(reach_end = factor(reach_end, levels = reach_end)) %>% 
+    #   plot_ly(x = ~reach_end, y = ~Survival, type = 'scatter', mode = 'markers',
+    #           hoverinfo = 'text',
+    #           text = ~paste('</br> Survival: ', Survival,
+    #                         '</br> LCI: ', LCI,
+    #                         '</br> UCI: ', UCI,
+    #                         '</br> Reach: ', paste0(reach_start, " to ", reach_end),
+    #                         '</br> RKM: ', paste0(rkm_start, " to " , rkm_end),
+    #                         '</br> Count Start: ', count_at_start,
+    #                         '</br> Count End: ', count_at_end
+    #           ),
+    #           error_y = ~list(
+    #             type = 'data',
+    #             symmetric = FALSE,
+    #             array = UCI-Survival,
+    #             arrayminus = Survival-LCI)
+    #   ) %>% 
+    #   layout(title = paste0("Reach Survival for ", name)) %>% 
+    #   layout(xaxis = list(showline = FALSE,
+    #                       zeroline = FALSE,
+    #                       title = "Receiver Location")) %>% 
+    #   layout(yaxis = list(showline = FALSE,
+    #                       zeroline = FALSE,
+    #                       title = "Survival per 10km"))
     
   })
   

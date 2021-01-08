@@ -31,8 +31,8 @@ library(DT)
 # --- CDEC Flows
 
 # Check for changes every 90 days
-  # If last dl was > 90 days update files
-  # else read in csv
+# If last dl was > 90 days update files
+# else read in csv
 
 # Download updates every 90 days
 last_checked_date <- read_rds("last_checked_date.RDS")
@@ -112,7 +112,7 @@ if (as.numeric(Sys.Date() - last_checked_date) < 90) {
     saveRDS(last_checked_date, "last_checked_date.RDS")
   }
 }
-  
+
 # This must be manually updated
 VemcoReceiverDeployments <- vroom("./data/VemcoReceiverDeployments.csv") %>%
   left_join(ReceiverDeployments %>% 
@@ -212,178 +212,178 @@ cdec_stations <- vroom("./data/cdec_stations.csv")
 # UI ----------------------------------------------------------------------
 
 ui <- fluidPage(theme = shinytheme("flatly"),
-  use_waitress(),
-  navbarPage("Central Valley Enhanced Acoustic Tagging Project",
-             tabPanel("Background", 
-                      mainPanel(
-                        uiOutput("background")#,
-                        #slickROutput("slick_output", width = '500px', height = '500px')
-                      )
-             ),
-             tabPanel("Receiver Deployments",
-                      sidebarLayout(
-                        sidebarPanel(
-                          radioButtons("receiverType", "Receiver type",
-                                       c("Autonomous", "Real-time", "Vemco")
-                          ),
-                          selectInput("water_year",
-                                      "Water Year:",
-                                      ""),
-                          helpText("Note: water year is defined as the 12 month period starting 
+                use_waitress(),
+                navbarPage("Central Valley Enhanced Acoustic Tagging Project",
+                           tabPanel("Background", 
+                                    mainPanel(
+                                      uiOutput("background")#,
+                                      #slickROutput("slick_output", width = '500px', height = '500px')
+                                    )
+                           ),
+                           tabPanel("Receiver Deployments",
+                                    sidebarLayout(
+                                      sidebarPanel(
+                                        radioButtons("receiverType", "Receiver type",
+                                                     c("Autonomous", "Real-time", "Vemco")
+                                        ),
+                                        selectInput("water_year",
+                                                    "Water Year:",
+                                                    ""),
+                                        helpText("Note: water year is defined as the 12 month period starting 
                                    October 1 to September 30 of the following calendar year. 
                                    The water year is designated by the calendar year in which 
                                    it ends and which includes 9 of the 12 months. Thus, the year
                                    ending September 30, 1999 is called the 1999 water year."),
-                          htmlOutput("map_marker_click")
-                        ),
-                        mainPanel(
-                          leafletOutput("map", width = "100%", height = "650"),
-                          dataTableOutput("receiver_table")
-                        )
-                      )
-             ),
-             tabPanel("Hydrology",
-                      box(dygraphOutput("dygraph", width = "100%")),
-                      box(leafletOutput("hydromap", width = "75%")),
-                      textOutput("text1"),
-                      textOutput("text2"),
-                      textOutput("text3"),
-                      downloadButton("downloadData", "Download")
-
-             ),
-             tabPanel("Outmigration Animation",
-                      sidebarLayout(
-                        sidebarPanel(
-                          selectInput("anim_dataset", "Choose a study population",
-                                      #choices = strsplit(list.files("./data/Timestep"), ".csv")),
-                                      choices = studyid_list),
-                          helpText("This tool visualizes study group detection data into an animated time series",
-                                   "of fish outmigration. Unique fish detections are identified at each general",
-                                   "receiver location and summed by day. Note that is it possible for a fish to",
-                                   "be detected at more than one general receiver location in a single day.")
-                        ),
-                        mainPanel(
-                          leafletOutput("timemap", width = "100%", height = "650")
-                        )
-                      )
-             ),
-             tabPanel("Data Explorer",
-                      headerPanel("Select Options"),
-                      sidebarPanel(
-                        selectInput("data_explorer_datasets", "Study Populations",
-                                    choices = studyid_list,
-                                    multiple = TRUE,
-                                    selectize = TRUE),
-                        selectInput("variable", "Variable",
-                                    choices = c("Weight", "Length")),
-                        selectInput("plot_type", "Plot type", 
-                                    choices = c("boxplot", "histogram", "density")),
-                        # Show this bin width slider only if histogram is chosen
-                        conditionalPanel(
-                          condition = "input.plot_type == 'histogram'",
-                          # Place holder for bin slider input, created in server side
-                          uiOutput("bin_slider")
-                        )
-                      ),
-                      mainPanel(
-                        plotlyOutput("plotly_plot"),
-                        tableOutput("summarytable")
-                      )
-              ),
-             tabPanel("Time of Day",
-                      headerPanel("Select Options"),
-                      mainPanel(
-                        selectInput("time_of_day_input", "Choose a study population",
-                                    choices = studyid_list
+                                        htmlOutput("map_marker_click")
+                                      ),
+                                      mainPanel(
+                                        leafletOutput("map", width = "100%", height = "650"),
+                                        dataTableOutput("receiver_table")
+                                      )
+                                    )
+                           ),
+                           tabPanel("Hydrology",
+                                    box(dygraphOutput("dygraph", width = "100%")),
+                                    box(leafletOutput("hydromap", width = "75%")),
+                                    textOutput("text1"),
+                                    textOutput("text2"),
+                                    textOutput("text3"),
+                                    downloadButton("downloadData", "Download")
+                                    
+                           ),
+                           tabPanel("Outmigration Animation",
+                                    sidebarLayout(
+                                      sidebarPanel(
+                                        selectInput("anim_dataset", "Choose a study population",
+                                                    #choices = strsplit(list.files("./data/Timestep"), ".csv")),
+                                                    choices = studyid_list),
+                                        helpText("This tool visualizes study group detection data into an animated time series",
+                                                 "of fish outmigration. Unique fish detections are identified at each general",
+                                                 "receiver location and summed by day. Note that is it possible for a fish to",
+                                                 "be detected at more than one general receiver location in a single day.")
+                                      ),
+                                      mainPanel(
+                                        leafletOutput("timemap", width = "100%", height = "650")
+                                      )
+                                    )
+                           ),
+                           tabPanel("Data Explorer",
+                                    headerPanel("Select Options"),
+                                    sidebarPanel(
+                                      selectInput("data_explorer_datasets", "Study Populations",
+                                                  choices = studyid_list,
+                                                  multiple = TRUE,
+                                                  selectize = TRUE),
+                                      selectInput("variable", "Variable",
+                                                  choices = c("Weight", "Length")),
+                                      selectInput("plot_type", "Plot type", 
+                                                  choices = c("boxplot", "histogram", "density")),
+                                      # Show this bin width slider only if histogram is chosen
+                                      conditionalPanel(
+                                        condition = "input.plot_type == 'histogram'",
+                                        # Place holder for bin slider input, created in server side
+                                        uiOutput("bin_slider")
+                                      )
                                     ),
-                        radioButtons("time_of_day_radio", "Choose all detections or by receiver GEN",
-                                     c("All Detections", "By General Location")
-                        ),
-                        conditionalPanel(
-                          condition = "input.time_of_day_radio == 'By General Location'",
-                          selectInput("time_of_day_GEN", "Select a General Location",
-                                      "")
-                        ),
-                        plotlyOutput("time_of_day_plot"),
-                        uiOutput("time_of_day_caption")
-                      )
-             ),
-             tabPanel("Survival",
-                      tabsetPanel(
-                        tabPanel("Cumulative Survival",
-                                 headerPanel("Select Options"),
-                                 sidebarPanel(
-                                   uiOutput("cumSurvSelect"),
-                                   helpText("Note: These survival results are 
+                                    mainPanel(
+                                      plotlyOutput("plotly_plot"),
+                                      tableOutput("summarytable")
+                                    )
+                           ),
+                           tabPanel("Time of Day",
+                                    headerPanel("Select Options"),
+                                    mainPanel(
+                                      selectInput("time_of_day_input", "Choose a study population",
+                                                  choices = studyid_list
+                                      ),
+                                      radioButtons("time_of_day_radio", "Choose all detections or by receiver GEN",
+                                                   c("All Detections", "By General Location")
+                                      ),
+                                      conditionalPanel(
+                                        condition = "input.time_of_day_radio == 'By General Location'",
+                                        selectInput("time_of_day_GEN", "Select a General Location",
+                                                    "")
+                                      ),
+                                      plotlyOutput("time_of_day_plot"),
+                                      uiOutput("time_of_day_caption")
+                                    )
+                           ),
+                           tabPanel("Survival",
+                                    tabsetPanel(
+                                      tabPanel("Cumulative Survival",
+                                               headerPanel("Select Options"),
+                                               sidebarPanel(
+                                                 uiOutput("cumSurvSelect"),
+                                                 helpText("Note: These survival results are 
                                           preliminary and for discussion purposes 
                                           only. Detection data has not been 
                                           filtered for predator detections, and 
                                           survival estimates have not been 
                                           adjusted for any potential premature 
                                           tag failures."),
-                                   radioButtons("cumsurvival_radio", 
-                                                "View",
-                                                c("Plot", "Table")
-                                   ),
-                                   leafletOutput("survival_map2")
-                                 ),
-                                 mainPanel(
-                                   conditionalPanel(
-                                     condition = "input.cumsurvival_radio == 'Plot'",
-                                     plotlyOutput("plotly_survival_output")
-                                   ),
-                                   conditionalPanel(
-                                     condition = "input.cumsurvival_radio == 'Table'",
-                                     dataTableOutput('cumSurvDT')
-                                   )
-                                 )
-                        ),
-                        tabPanel("Reach Survival",
-                                 headerPanel("Select Options"),
-                                 sidebarPanel(
-                                   uiOutput("reachSurvSelect"),
-                                   helpText("Note: These survival results are 
+                                                 radioButtons("cumsurvival_radio", 
+                                                              "View",
+                                                              c("Plot", "Table")
+                                                 ),
+                                                 leafletOutput("survival_map2")
+                                               ),
+                                               mainPanel(
+                                                 conditionalPanel(
+                                                   condition = "input.cumsurvival_radio == 'Plot'",
+                                                   plotlyOutput("plotly_survival_output")
+                                                 ),
+                                                 conditionalPanel(
+                                                   condition = "input.cumsurvival_radio == 'Table'",
+                                                   dataTableOutput('cumSurvDT')
+                                                 )
+                                               )
+                                      ),
+                                      tabPanel("Reach Survival",
+                                               headerPanel("Select Options"),
+                                               sidebarPanel(
+                                                 uiOutput("reachSurvSelect"),
+                                                 helpText("Note: These survival results are 
                                           preliminary and for discussion purposes 
                                           only. Detection data has not been 
                                           filtered for predator detections, and 
                                           survival estimates have not been 
                                           adjusted for any potential premature 
                                           tag failures."),
-                                   radioButtons("reachSurvRadio", 
-                                                "View",
-                                                c("Plot", "Table")
-                                   ),
-                                   leafletOutput("reachSurvMap")
-                                 ),
-                                 mainPanel(
-                                   conditionalPanel(
-                                     condition = "input.reachSurvRadio == 'Plot'",
-                                     plotlyOutput("reachSurvPlotly")
-                                   ),
-                                   conditionalPanel(
-                                     condition = "input.reachSurvRadio == 'Table'",
-                                     dataTableOutput('reachSurvDT')
-                                   )
-                                 )
-                        )
-                      )
-
-             ),
-             tabPanel("Movement",
-                      headerPanel("Select Options"),
-                      sidebarPanel(
-                        selectInput(
-                          "movement_dataset", "Choose a study population",
-                          choices = studyid_list
-                        )
-                      ),
-                      mainPanel(
-                        gt_output(
-                          "movement_gt"
-                        )
-                      )
-             )
-  )
+                                                 radioButtons("reachSurvRadio", 
+                                                              "View",
+                                                              c("Plot", "Table")
+                                                 ),
+                                                 leafletOutput("reachSurvMap")
+                                               ),
+                                               mainPanel(
+                                                 conditionalPanel(
+                                                   condition = "input.reachSurvRadio == 'Plot'",
+                                                   plotlyOutput("reachSurvPlotly")
+                                                 ),
+                                                 conditionalPanel(
+                                                   condition = "input.reachSurvRadio == 'Table'",
+                                                   dataTableOutput('reachSurvDT')
+                                                 )
+                                               )
+                                      )
+                                    )
+                                    
+                           ),
+                           tabPanel("Movement",
+                                    headerPanel("Select Options"),
+                                    sidebarPanel(
+                                      selectInput(
+                                        "movement_dataset", "Choose a study population",
+                                        choices = studyid_list
+                                      )
+                                    ),
+                                    mainPanel(
+                                      gt_output(
+                                        "movement_gt"
+                                      )
+                                    )
+                           )
+                )
 )
 
 
@@ -392,7 +392,7 @@ ui <- fluidPage(theme = shinytheme("flatly"),
 server <- function(input, output, session) {
   
   waitress <- Waitress$new("#background", infinite = T, hide_on_render = T)
-
+  
   # Background --------------------------------------------------------------
   output$background <- renderUI({
     waitress$start(h3("Loading..."))
@@ -509,7 +509,7 @@ server <- function(input, output, session) {
   #   slickR(imgs, width = '500px', height = '500px') +
   #     settings(autoplay = TRUE, autoplaySpeed = 3000)
   # })
-
+  
   
   # Receiver Deployments --------------------------------------------------
   
@@ -603,7 +603,7 @@ server <- function(input, output, session) {
   
   prevRecType <- reactiveVal("")
   prevYear <- reactiveVal("")
-
+  
   # Produces table output in response to clicks on receiver deployment map markers
   observeEvent(input$map_marker_click, {
     # Essentially the attributes of the clicked receiver marker is assigned to p
@@ -668,11 +668,11 @@ server <- function(input, output, session) {
     if (!is_empty(prevRecType()) & input$receiverType != prevRecType()) {
       df <- datatable(
         data.frame(GPSname = NA, 
-        SN = NA, 
-        StartTime = NA, 
-        EndTime = NA,
-        GenLat = NA,
-        GenLon = NA)
+                   SN = NA, 
+                   StartTime = NA, 
+                   EndTime = NA,
+                   GenLat = NA,
+                   GenLon = NA)
       )
       
       output$receiver_table <- renderDataTable(df)
@@ -685,11 +685,11 @@ server <- function(input, output, session) {
     if (!is_empty(prevYear()) & input$water_year != prevYear()) {
       df <- datatable(
         data.frame(GPSname = NA, 
-        SN = NA, 
-        StartTime = NA, 
-        EndTime = NA,
-        GenLat = NA,
-        GenLon = NA)
+                   SN = NA, 
+                   StartTime = NA, 
+                   EndTime = NA,
+                   GenLat = NA,
+                   GenLon = NA)
       )
       
       output$receiver_table <- renderDataTable(df)
@@ -697,7 +697,7 @@ server <- function(input, output, session) {
     }
   })
   
-
+  
   
   
   # Hydrology  --------------------------------------------------
@@ -734,7 +734,7 @@ server <- function(input, output, session) {
     # Need to drop z dimension: https://gis.stackexchange.com/questions/253898/adding-a-linestring-by-st-read-in-shiny-leaflet
     rivers <- st_zm(rivers, drop = T, what = "ZM")
     
-
+    
     leaflet(data = cdec_stations) %>% 
       addPolygons(
         data = rivers, color = "#668db3",
@@ -804,9 +804,9 @@ server <- function(input, output, session) {
     }
   )
   
-
+  
   # Outmigration Animation  --------------------------------------------------
-
+  
   # Reactive expression that retrieves detections from ERDDAP and formats it for 
   # the time step animation
   timestepVar<-  reactive({
@@ -867,7 +867,7 @@ server <- function(input, output, session) {
   # addMinicharts which takes a time argument
   output$timemap <- renderLeaflet({
     data <- timestepVar()
-
+    
     leaflet(data = data, width = "100%", height = "800px") %>%
       addProviderTiles(providers$Stamen.TerrainBackground) %>%
       setView(mean(data$GenLon), mean(data$GenLat), 7) %>%
@@ -881,12 +881,12 @@ server <- function(input, output, session) {
           showValues = FALSE,
           supValues = data %>% select(GEN, num_fish),
           supLabels = c("GEN", "N = ")
-                ),
+        ),
         showLabels = TRUE,
         opacity = .7
-        )
+      )
   })
-
+  
   # Data Explorer  --------------------------------------------------
   
   # Reactive function that returns the filtered TaggedFish table by selected studyID
@@ -945,11 +945,11 @@ server <- function(input, output, session) {
     # Create the plotly plot differently depending on plot type
     if (input$plot_type == "boxplot") {
       ggplotly(ggplot(tagged_fish, 
-             aes(
-               x = StudyID,
-               y = get(input$variable),
-               fill = StudyID
-             )
+                      aes(
+                        x = StudyID,
+                        y = get(input$variable),
+                        fill = StudyID
+                      )
       ) + 
         plot_type +
         ylab(input$variable) +
@@ -958,10 +958,10 @@ server <- function(input, output, session) {
         theme(legend.position="top", axis.text=element_text(size=12))) 
     } else {
       ggplotly(ggplot(tagged_fish, 
-             aes(
-               x = get(input$variable),
-               fill = StudyID
-             )
+                      aes(
+                        x = get(input$variable),
+                        fill = StudyID
+                      )
       ) + 
         plot_type +
         scale_y_continuous(expand = c(0, 0)) +
@@ -972,8 +972,8 @@ server <- function(input, output, session) {
     }
     
   })
-
-# Time of Day -------------------------------------------------------------
+  
+  # Time of Day -------------------------------------------------------------
   
   # Reactive list of GEN depending on StudyID selected
   GEN_list <-  reactive({
@@ -1012,19 +1012,19 @@ server <- function(input, output, session) {
       )
     
   })
-
+  
   output$time_of_day_plot <- renderPlotly({
     # Retrieve the file name in the detections folder that corresponds to the 
     # StudyID selected by the user, Look at all files in the detections folder, 
     # choose the one that contains the StudyID string in its name
-
+    
     detections <- timeofdayVar()
     
     # Get first detection time of each fish at each GEN
     filtered <- detections  %>% 
       group_by(FishID, GEN) %>% 
       summarise(first_detection = min(hour))
-
+    
     # If user selected to examine time of arrivals by GEN filter the detection 
     # file by the GEN they chose
     if (input$time_of_day_radio == "By General Location") {
@@ -1035,7 +1035,7 @@ server <- function(input, output, session) {
     # Bins data by hour explicitly from 0:23 hours
     # Necessary to do it this way instead of dplyr group_by b/c not all hours 
     # may be represented
-
+    
     hour_freq <- data.frame("hour" = 0:23) %>% 
       left_join(filtered %>% 
                   group_by(first_detection) %>% 
@@ -1044,7 +1044,7 @@ server <- function(input, output, session) {
       rename(freq = n) %>% 
       mutate(freq = ifelse(is.na(freq), 0, freq),
              percent_pass = ((freq / sum(freq)) * 100)
-             )
+      )
     
     # Find Sunset, Sunrise for earliest and latest date using mean lat/lon
     receivers <- detections %>% 
@@ -1139,7 +1139,7 @@ server <- function(input, output, session) {
   # will autowidth the same length as the plot
   # Couldn't figure out how to autowidth in ggplot
   output$time_of_day_caption <- renderUI({
-   
+    
     detections <- timeofdayVar() %>% 
       mutate(time = ymd_hms(time))
     # Get earliest date and latest dates to compare differences in these times
@@ -1149,9 +1149,9 @@ server <- function(input, output, session) {
     paste0("The histogram displays the frequency of fish detections as a function of hour of day. The gray box represents \nhours of nighttime between the earliest sunrise and latest sunset. The dotted lines represent \nhours of nighttime between the latest sunrise and earliest sunset. The first date of detection was at: ", earliest_date, " and the last date of detection was at: ", latest_date, ".")
   })
   
-
-# Survival ----------------------------------------------------------------
-
+  
+  # Survival ----------------------------------------------------------------
+  
   # Synchronize studyID selection between tabs
   # https://stackoverflow.com/questions/44516768/r-shiny-synchronize-filters-on-multiple-tabs
   studyIDSelect <- reactiveVal("")  
@@ -1197,7 +1197,7 @@ server <- function(input, output, session) {
         Survival = cum.phi,
         SE = cum.phi.se,
         Count = count
-
+        
       )
   })
   
@@ -1206,28 +1206,28 @@ server <- function(input, output, session) {
     df <- cumsurvivalVar()
     
     df %>% 
-    plot_ly(x = ~RKM, y = ~Survival, type = 'scatter', mode = 'lines+markers',
-            hoverinfo = 'text',
-            text = ~paste('</br> Survival: ', Survival,
-                          '</br> LCI: ', LCI,
-                          '</br> UCI: ', UCI,
-                          '</br> GEN: ', GEN,
-                          '</br> GenRKM: ', RKM,
-                          '</br> Raw number of fish to site: ', Count
-                          ),
-            # https://rpubs.com/chelsea/68601
-            error_y = ~list(
-              type = "data", 
-              symmetric = FALSE, 
-              arrayminus = Survival - LCI,
-              array = UCI - Survival)) %>% 
+      plot_ly(x = ~RKM, y = ~Survival, type = 'scatter', mode = 'lines+markers',
+              hoverinfo = 'text',
+              text = ~paste('</br> Survival: ', Survival,
+                            '</br> LCI: ', LCI,
+                            '</br> UCI: ', UCI,
+                            '</br> GEN: ', GEN,
+                            '</br> GenRKM: ', RKM,
+                            '</br> Raw number of fish to site: ', Count
+              ),
+              # https://rpubs.com/chelsea/68601
+              error_y = ~list(
+                type = "data", 
+                symmetric = FALSE, 
+                arrayminus = Survival - LCI,
+                array = UCI - Survival)) %>% 
       layout(title = paste0("Cumulative Survival for ", studyIDSelect())) %>%
       layout(xaxis = list(autorange = "reversed",
                           showline = FALSE,
                           zeroline = FALSE)) %>% 
       layout(yaxis = list(showline = FALSE,
                           zeroline = FALSE))
-
+    
   })
   
   
@@ -1242,10 +1242,10 @@ server <- function(input, output, session) {
     #   group_by(release_location, release_latitude, release_longitude, 
     #            release_river_km) %>% 
     #   summarise(count = n())
-
+    
     df %>% 
       # filter(reach_num != 0) %>% 
-    leaflet() %>% 
+      leaflet() %>% 
       addProviderTiles(
         providers$Stamen.Terrain, group = "Stamen Terrain",
         options = providerTileOptions(noWrap = TRUE)) %>% 
@@ -1283,17 +1283,17 @@ server <- function(input, output, session) {
       #                   , release$Count
       #                   
       #   ),
-      #   label = ~release_location,
-      #   icon = makeIcon(
-      #     iconUrl = "starred.png",
-      #     iconWidth = 25,
-      #     iconHeight = 25
-      #   )
-      # ) %>% 
-      addLayersControl(
-        baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
-        options = layersControlOptions(collapsed = TRUE)
-      )
+    #   label = ~release_location,
+    #   icon = makeIcon(
+    #     iconUrl = "starred.png",
+    #     iconWidth = 25,
+    #     iconHeight = 25
+    #   )
+    # ) %>% 
+    addLayersControl(
+      baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
+      options = layersControlOptions(collapsed = TRUE)
+    )
   })
   
   output$cumSurvDT <- renderDataTable({
@@ -1402,27 +1402,11 @@ server <- function(input, output, session) {
     
     # If studyID contains multi rel loc, rearrange data to wide format
     if(length(unique(df$release)) > 1) {
-      # df <- df %>% 
-      #   mutate_at(c("estimate", "se", "lcl", "ucl"), round, digits = 3) %>% 
-      #   mutate_at(c("rkm_start", "rkm_end"), round, digits = 2) %>% 
-      #   rename(
-      #     Survival = estimate,
-      #     SE = se,
-      #     LCI = lcl,
-      #     UCI = ucl,
-      #   ) %>% 
-      #   filter(reach_end != "GoldenGateW") %>% 
-      #   pivot_wider(
-      #     names_from = release,
-      #     values_from = c("Survival", "SE", "LCI", "UCI", "reach_num", 
-      #                     "count_start", "count_end")
-      #   ) %>% 
-      #   mutate(id = row_number())
       
       df <- df %>% 
         mutate_at(c("estimate", "se", "lcl", "ucl"), round, digits = 3) %>% 
         mutate_at(c("rkm_start", "rkm_end"), round, digits = 2) %>% 
-        mutate(id = seq.int(nrow(df))) %>% 
+        mutate(id = seq.int(nrow(df))) %>%
         rename(
           Survival = estimate,
           SE = se,
@@ -1430,12 +1414,12 @@ server <- function(input, output, session) {
           UCI = ucl
         ) %>% 
         filter(reach_end != "GoldenGateW")
-          
+      
     } else {
       df <- df %>% 
         mutate_at(c("estimate", "se", "lcl", "ucl"), round, digits = 3) %>% 
         mutate_at(c("rkm_start", "rkm_end"), round, digits = 2) %>% 
-        mutate(id = seq.int(nrow(df))) %>% 
+        mutate(id = seq.int(nrow(df))) %>%
         rename(
           Survival = estimate,
           SE = se,
@@ -1445,23 +1429,17 @@ server <- function(input, output, session) {
         filter(reach_end != "GoldenGateW")
     }
     
-
+    
   })
   
   output$reachSurvMap <- renderLeaflet({
     
     df <- reachSurvVar()
     
-    # release <- TaggedFish %>% 
-    #   filter(study_id == input$reachSurvInput) %>% 
-    #   select(release_location, release_latitude, release_longitude, 
-    #          release_river_km) %>% 
-    #   group_by(release_location, release_latitude, release_longitude, 
-    #            release_river_km) %>% 
-    #   summarise(count = n())
-    
     df %>% 
-      # filter(reach_num != 0) %>% 
+      # Do this b/c if multiple releases there will be duplictate rows only 
+      # need one set
+      dplyr::slice(1:max(df$reach_num)) %>% 
       leaflet() %>% 
       addProviderTiles(
         providers$Stamen.Terrain, group = "Stamen Terrain",
@@ -1567,7 +1545,7 @@ server <- function(input, output, session) {
                                     '</br> RKM: ', paste0(rkm_start, " to " , rkm_end),
                                     '</br> Count Start: ', count_at_start,
                                     '</br> Count End: ', count_at_end
-                       )),
+                   )),
                    color = "#007EFF") +
         geom_errorbar(mapping = aes(x = reach_end, ymin = LCI, ymax = UCI),  
                       width = .1, position = position_dodge(.5),
@@ -1586,55 +1564,87 @@ server <- function(input, output, session) {
       ggplotly(p, tooltip = "text")
     }
     
-    # df %>% 
-    #   mutate(reach_end = factor(reach_end, levels = reach_end)) %>% 
-    #   plot_ly(x = ~reach_end, y = ~Survival, type = 'scatter', mode = 'markers',
-    #           hoverinfo = 'text',
-    #           text = ~paste('</br> Survival: ', Survival,
-    #                         '</br> LCI: ', LCI,
-    #                         '</br> UCI: ', UCI,
-    #                         '</br> Reach: ', paste0(reach_start, " to ", reach_end),
-    #                         '</br> RKM: ', paste0(rkm_start, " to " , rkm_end),
-    #                         '</br> Count Start: ', count_at_start,
-    #                         '</br> Count End: ', count_at_end
-    #           ),
-    #           error_y = ~list(
-    #             type = 'data',
-    #             symmetric = FALSE,
-    #             array = UCI-Survival,
-    #             arrayminus = Survival-LCI)
-    #   ) %>% 
-    #   layout(title = paste0("Reach Survival for ", name)) %>% 
-    #   layout(xaxis = list(showline = FALSE,
-    #                       zeroline = FALSE,
-    #                       title = "Receiver Location")) %>% 
-    #   layout(yaxis = list(showline = FALSE,
-    #                       zeroline = FALSE,
-    #                       title = "Survival per 10km"))
-    
   })
   
   output$reachSurvDT <- renderDataTable({
-    dat <- reachSurvVar() %>% 
-      select('Reach Start' = reach_start, 'Reach End' = reach_end, 
-             'RKM Start' = rkm_start, 'RKM End' = rkm_end, Region, 
-             Survival, LCI, UCI, 'Count Start' = count_at_start,
-             'Count End' = count_at_end, id)
+    df <- reachSurvVar()
     
-    # Put DL button on hold till I can figure it out properly
-    datatable(dat, selection = "single", #extensions = 'Buttons',
-              options=list(stateSave = TRUE,
-                           dom = 'Bfrtip',
-                           # buttons =
-                           #   list('copy', 'print', list(
-                           #     extend = 'collection',
-                           #     buttons = list(
-                           #       list(extend = 'csv', filename = studyIDSelect()),
-                           #       list(extend = 'excel', filename = studyIDSelect()),
-                           #       list(extend = 'pdf', filename = studyIDSelect())),
-                           #     text = 'Download'
-                           #   )),
-              rownames = FALSE))
+    # If multiple release
+    if(length(unique(df$release)) > 1) {
+      # Pivot_wider does not natively allow ordering columns by names
+      # manual method here: https://stackoverflow.com/questions/60399441/tidyrpivot-wider-reorder-column-names-grouping-by-name-from
+      prefixes <- unique(df$release)
+      
+      # Widen data so that numbers for each release represented in a single row
+      df <- df %>%
+        select(-id) %>% 
+        dplyr::rename(
+          'Count Start' = 'count_at_start',
+          'Count End' = 'count_at_end'
+        ) %>% 
+        pivot_wider(
+          names_from = release,
+          values_from = c("Survival", "SE", "LCI", "UCI", 
+                          "Count Start", "Count End"),
+          names_glue = "{release} {.value}"
+        ) %>%
+        mutate(id = row_number())
+      
+      names_to_order <- map(prefixes, ~ names(df)[grep(paste0(.x, " "), names(df))]) %>% unlist
+      names_id <- setdiff(names(df), names_to_order)
+      
+      df <- df %>%
+        select(names_id, names_to_order)
+      
+      
+      df %>% 
+        select(-c(reach_start, reach_end, rkm_start, rkm_end, Region, reach_num,
+                  GenLon_start, GenLon_end, GenLat_start, GenLat_end)) %>% 
+        datatable(selection = "single", extensions = 'FixedHeader', #extensions = 'Buttons',
+                  options=list(stateSave = TRUE,
+                               dom = 'Bfrtip',
+                               scrollX = TRUE, # allows horizontal scrolling 
+                               fixedHeader = TRUE, # freezes header,
+                               scrollY = 500,
+                               # buttons =
+                               #   list('copy', 'print', list(
+                               #     extend = 'collection',
+                               #     buttons = list(
+                               #       list(extend = 'csv', filename = studyIDSelect()),
+                               #       list(extend = 'excel', filename = studyIDSelect()),
+                               #       list(extend = 'pdf', filename = studyIDSelect())),
+                               #     text = 'Download'
+                               #   )),
+                               rownames = FALSE),
+                  # This is allows x scrolling and freezer headers to work simultaneously
+                  # https://github.com/rstudio/DT/issues/643
+                  fillContainer = T
+                  )
+      
+    } else {
+      df <- reachSurvVar() %>% 
+        select('Reach Start' = reach_start, 'Reach End' = reach_end, 
+               'RKM Start' = rkm_start, 'RKM End' = rkm_end, Region, 
+               Survival, LCI, UCI, 'Count Start' = count_at_start,
+               'Count End' = count_at_end, id)
+      
+      # Put DL button on hold till I can figure it out properly
+      datatable(df, selection = "single", #extensions = 'Buttons',
+                options=list(stateSave = TRUE,
+                             dom = 'Bfrtip',
+                             # buttons =
+                             #   list('copy', 'print', list(
+                             #     extend = 'collection',
+                             #     buttons = list(
+                             #       list(extend = 'csv', filename = studyIDSelect()),
+                             #       list(extend = 'excel', filename = studyIDSelect()),
+                             #       list(extend = 'pdf', filename = studyIDSelect())),
+                             #     text = 'Download'
+                             #   )),
+                             rownames = FALSE))
+    }
+    
+
   })
   
   # to keep track of previously selected row
@@ -1731,14 +1741,14 @@ server <- function(input, output, session) {
           "<b># Count End: </b>",
           prev_row2()$count_at_end), 
           layerId = as.character(prev_row2()$id),
-          lng=prev_row2()$GenLon, 
-          lat=prev_row2()$GenLat)
+          lng=prev_row2()$GenLon_end, 
+          lat=prev_row2()$GenLat_end)
     }
   })
   
-
-# Movement ----------------------------------------------------------------
-
+  
+  # Movement ----------------------------------------------------------------
+  
   # Takes user selected studyIDs and retrieves data from ERDDAP
   movementVar <-  reactive({
     req(input$movement_dataset)
@@ -1794,7 +1804,7 @@ server <- function(input, output, session) {
       mutate_if(is.difftime, as.numeric) %>% 
       arrange(desc(GenRKM))
     
-      
+    
   })
   
   output$movement_gt <- render_gt({

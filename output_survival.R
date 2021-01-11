@@ -738,7 +738,7 @@ find_multi_release_date <- function(studyid_list) {
 multi_rel_date <- find_multi_release_date(studyid_list)
 
 
-### Output survival estimates for multi-release location groups -------------
+### Output per reach survival estimates for multi-release location groups -------------
 # "FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", "FR_Spring_2019" 
 # Nimbus_Fall_2018 
 
@@ -857,6 +857,91 @@ combined_surv <- combined_surv %>%
 
 write_csv(combined_surv, paste0("./data/Survival/Reach Survival Per 10km/", 
                                 studyID, "_reach_survival.csv"))
+
+
+#### Output cumulative survival estimates for multiple release ---------------
+# "FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", "FR_Spring_2019" 
+
+studyID <- "FR_Spring_2019"
+
+detections <- get_detections(studyID)
+
+replace_dict = list(replace_with = list(c("Chipps"),
+                                        c("Benicia")),
+                    replace_list = list(c("ChippsE", "ChippsW"),
+                                        c("BeniciaE", "BeniciaW")))
+
+reach.meta <- get.receiver.GEN(detections)
+
+# Remove Delta and Yolo sites except for Chipps, remove anything above release rkm
+reach.meta <- reach.meta %>% 
+  filter(
+    !Region %in% c("North Delta", "East Delta", "West Delta", "Yolo Bypass") |
+      GEN %in% c("ChippsE", "ChippsW"),
+    GenRKM <= TaggedFish %>% 
+      filter(study_id == studyID) %>% 
+      mutate(release_river_km = as.numeric(release_river_km)) %>% 
+      group_by(study_id) %>% 
+      summarise(max_rkm = max(release_river_km)) %>% 
+      pull(max_rkm)
+  )
+
+# Visually inspect receiver locations, determine is sites need to be removed
+leaflet(data = reach.meta) %>% 
+  addTiles() %>% 
+  addMarkers(lng = ~GenLon, lat = ~GenLat, label = ~GEN, 
+             labelOptions = labelOptions(noHide = T))
+
+# Based on visual inspect remove sites that don't make sense, i.e. upstream movement
+# or wrong river
+remove_list <- c("AbvTisdale", "BlwChinaBend", "KnightsLanding")
+
+reach.meta <- reach.meta %>% 
+  filter(
+    #!(GEN %in% remove_list)
+    !(Region != "Feather_R" & GenRKM > 203.46)
+  )
+
+# Identify the unique release locations
+rel_loc <- unique(detections$Rel_loc)
+
+run_multi_survival_cum <- function(release_loc) {
+  
+  if (reach.meta$GenRKM[reach.meta$GEN == release_loc] < max(reach.meta$GenRKM)) {
+    reach.meta <- reach.meta %>% 
+      filter(
+        GenRKM <= reach.meta$GenRKM[reach.meta$GEN == release_loc]
+      )
+  }
+  
+  detects <- detections %>% 
+    filter(
+      Rel_loc == release_loc,
+      GEN %in% reach.meta$GEN
+    )
+  
+  aggregated <- aggregate_GEN(detects, reach.meta)
+  
+  EH <- make_EH(aggregated, release = release_loc)
+  
+  inp <- create_inp(aggregated, EH)
+  
+  cum_surv <- get_cum_survival(inp, add_release = T)
+  cum_surv <- format.cum.surv(cum_surv)
+  cum_surv$release <- release_loc
+  
+  cleanup(ask = F)
+  cum_surv
+}
+
+all_cum_surv <- lapply(rel_loc, run_multi_survival_cum) %>% 
+  bind_rows()
+
+write_csv(cum_surv, paste0("./data/Survival/Cumulative Survival/", 
+                           studyID, "_cumulative_survival.csv"))
+print(paste0(studyID, "_cumulative_survival.csv"))
+
+
 
 
 #### Output survival estimates------------------------------------------

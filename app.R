@@ -129,7 +129,7 @@ VemcoReceiverDeployments$uid <- 1:nrow(VemcoReceiverDeployments)
 
 #### List of studyIDs relevant to the project and selectable in the app
 #### Update this list as needed to allow for additional studyIDs to be selected
-studyid_list <- c("BC_Jumpstart_2019", "CNFH_FMR_2019", "ColemanFall_2012", 
+studyid_list <- c("CNFH_FMR_2019", "ColemanFall_2012", 
                   "ColemanFall_2013", "ColemanFall_2016", "ColemanFall_2017", 
                   "ColemanLateFall_2018", "ColemanLateFall_2019", 
                   "ColemanLateFall_2020", "DeerCk_SH_Wild_2018", 
@@ -168,20 +168,26 @@ if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
   # and 23 (river flow sensors) Then bind the rows together, then find what the 
   # max start date was, ultimately to get the start_date I want to use
   # That all the gauges are included in
-  start_date <- max((lapply(lapply(gauges, cdec_datasets), 
-                            function(x) filter(x, sensor_number %in% 
-                                                 c("20", "23"))) %>% 
-                       bind_rows())$start)
   
+  # NOT NECESSARY to get data from all the way in the beginning, just add 
+  # what is needed 
+  start_date <- max((lapply(lapply(gauges, cdec_datasets),
+                            function(x) filter(x, sensor_number %in%
+                                                 c("20", "23"))) %>%
+                       bind_rows())$start)
+
+  
+  # The last date of downloaded data in comb_flow + 1
+  last_date <- max(comb_flow$Index) + 1
   
   # apply the list of gauges to function that queries CDEC to get daily flow 
   # then turns it into an xts (time series object) object which is needed for dygraphs
   flows = lapply(gauges,
                  function(x) {
                    if (x == "KES") { # If Keswick, use reservoir outflow (23) instead 
-                     y <- cdec_query(x, 23, "D", start_date, Sys.Date())
+                     y <- cdec_query(x, 23, "D", last_date, Sys.Date())
                    }else {
-                     y <- cdec_query(x, 41, "D", start_date, Sys.Date())
+                     y <- cdec_query(x, 41, "D", last_date, Sys.Date())
                    }
                    y <- y %>% 
                      select(location_id, datetime, parameter_value) %>% 
@@ -201,7 +207,7 @@ if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
   
   # Close connection with comb_flow.csv so that I can overwrite it with new data
   rm(comb_flow)
-  write_csv(comb_flow2, "./data/comb_flow.csv")
+  write_csv(comb_flow2, "./data/comb_flow.csv", append = T)
   
 }else {
   comb_flow <- as.xts(read.csv.zoo("./data/comb_flow.csv"))
@@ -1182,12 +1188,12 @@ server <- function(input, output, session) {
   cumsurvivalVar<-  reactive({
     req(studyIDSelect())
     
-    name <- studyIDSelect()
+    name <- studyIDSelect() 
     
-    file <- list.files("./data/Survival/Cumulative Survival", name, full.names = T)
+    file <- list.files("./data/Survival/Cumulative Survival/", name, full.names = T)
     df <- read_csv(file)
     
-    df %>% 
+    df <- df %>% 
       mutate_at(c("cum.phi", "cum.phi.se", "LCI", "UCI"), round, digits = 3) %>% 
       mutate(
         RKM = round(RKM, digits = 2),
@@ -1205,29 +1211,66 @@ server <- function(input, output, session) {
     
     df <- cumsurvivalVar()
     
-    df %>% 
-      plot_ly(x = ~RKM, y = ~Survival, type = 'scatter', mode = 'lines+markers',
-              hoverinfo = 'text',
-              text = ~paste('</br> Survival: ', Survival,
-                            '</br> LCI: ', LCI,
-                            '</br> UCI: ', UCI,
-                            '</br> GEN: ', GEN,
-                            '</br> GenRKM: ', RKM,
-                            '</br> Raw number of fish to site: ', Count
-              ),
-              # https://rpubs.com/chelsea/68601
-              error_y = ~list(
-                type = "data", 
-                symmetric = FALSE, 
-                arrayminus = Survival - LCI,
-                array = UCI - Survival)) %>% 
-      layout(title = paste0("Cumulative Survival for ", studyIDSelect())) %>%
-      layout(xaxis = list(autorange = "reversed",
-                          showline = FALSE,
-                          zeroline = FALSE)) %>% 
-      layout(yaxis = list(showline = FALSE,
-                          zeroline = FALSE))
+    # If survival estimates contain the column 'release'
+    if (any(str_detect(colnames(df), "release"))) {
+
+      p <- df %>% 
+        ggplot(mapping = aes(x = RKM, y = Survival, group = release)) +
+        geom_point(position = position_dodge(width = 1), 
+                   aes(color = release,
+                       text = paste('</br> Survival: ', Survival,
+                                    '</br> LCI: ', LCI,
+                                    '</br> UCI: ', UCI,
+                                    '</br> GEN: ', GEN,
+                                    '</br> RKM: ', RKM,
+                                    '</br> Count: ', Count,
+                                    '</br> Release: ', release
+                       ))) +
+        geom_line(aes(color = release)) +
+        geom_errorbar(mapping = aes(x = RKM, ymin = LCI, ymax = UCI, 
+                                    color = release),  width = .1,
+                      position = position_dodge(1)) +
+        scale_color_manual(values=c("#007EFF", "#FF8100")) +
+        labs(
+          title = paste0("Cumulative Survival for ", name),
+          x = "RKM",
+          y = "Survival",
+          color = "Release"
+        ) +
+        theme_minimal() +
+        theme(
+          plot.title = element_text(hjust = 0.5)
+        ) +
+        scale_x_reverse()
+      
+      ggplotly(p, tooltip = "text")
+    } else {
+      df %>% 
+        plot_ly(x = ~RKM, y = ~Survival, type = 'scatter', mode = 'lines+markers',
+                hoverinfo = 'text',
+                text = ~paste('</br> Survival: ', Survival,
+                              '</br> LCI: ', LCI,
+                              '</br> UCI: ', UCI,
+                              '</br> GEN: ', GEN,
+                              '</br> GenRKM: ', RKM,
+                              '</br> Raw number of fish to site: ', Count
+                ),
+                # https://rpubs.com/chelsea/68601
+                error_y = ~list(
+                  type = "data", 
+                  symmetric = FALSE, 
+                  arrayminus = Survival - LCI,
+                  array = UCI - Survival)) %>% 
+        layout(title = paste0("Cumulative Survival for ", studyIDSelect())) %>%
+        layout(xaxis = list(autorange = "reversed",
+                            showline = FALSE,
+                            zeroline = FALSE)) %>% 
+        layout(yaxis = list(showline = FALSE,
+                            zeroline = FALSE))
+      
+    }
     
+
   })
   
   
@@ -1244,6 +1287,7 @@ server <- function(input, output, session) {
     #   summarise(count = n())
     
     df %>% 
+      slice(1:(max(df$reach_num) + 1)) %>% 
       # filter(reach_num != 0) %>% 
       leaflet() %>% 
       addProviderTiles(
@@ -1263,12 +1307,7 @@ server <- function(input, output, session) {
                         "</br>",
                         "<b>RKM: </b>", 
                         df$RKM,
-                        "</br>",
-                        "<b>Survival: </b>", 
-                        df$Survival,
-                        "</br>",
-                        "<b># Fish: </b>",
-                        df$Count
+                        "</br>"
         ),
         label = ~GEN
       ) %>% 
@@ -1297,29 +1336,90 @@ server <- function(input, output, session) {
   })
   
   output$cumSurvDT <- renderDataTable({
-    dat <- cumsurvivalVar() %>% 
-      select(GEN, RKM, Region, Survival, LCI, UCI, Count, id)
+    df <- cumsurvivalVar()
     
-    # Put DL button on hold till I can figure it out properly
-    datatable(dat, selection = "single", #extensions = 'Buttons',
-              options=list(stateSave = TRUE,
-                           dom = 'Bfrtip',
-                           # buttons =
-                           #   list('copy', 'print', list(
-                           #     extend = 'collection',
-                           #     buttons = list(
-                           #       list(extend = 'csv',
-                           #            filename = paste0(studyIDSelect(), "_cumulative_survival"),
-                           #            header = TRUE),
-                           #       list(extend = 'excel', filename = paste0(studyIDSelect(), "_cumulative_survival"),
-                           #            title = paste0(studyIDSelect(), "_cumulative_survival"),
-                           #            header = TRUE),
-                           #       list(extend = 'pdf', filename = paste0(studyIDSelect(), "_cumulative_survival"),
-                           #            title = paste0(studyIDSelect(), "_cumulative_survival"),
-                           #            header = TRUE)),
-                           #     text = 'Download'
-                           #   )),
-                           rownames = FALSE))
+    # If survival estimates contain the column 'release'
+    if (any(str_detect(colnames(df), "release"))) {
+      # reaches <- cumsurvivalVar() %>% 
+      #   select(GEN, reach_num) %>% 
+      #   slice(1:(max(reach_num) + 1))
+      
+      df <- cumsurvivalVar() %>% 
+        select('Receiver Location' =  GEN, RKM, Region, Survival, SE, LCI, UCI, Count, release, id) #%>% 
+        # left_join(reaches,
+        #           by = c("Receiver Location" = "GEN"))
+      # manual method here: https://stackoverflow.com/questions/60399441/tidyrpivot-wider-reorder-column-names-grouping-by-name-from
+      prefixes <- unique(df$release)
+      
+      # Widen data so that numbers for each release represented in a single row
+      df <- df %>%
+        select(-id) %>% 
+        pivot_wider(
+          names_from = release,
+          values_from = c("Survival", "SE", "LCI", "UCI", 
+                          "Count"),
+          names_glue = "{release} {.value}"
+        ) %>%
+        mutate(id = row_number())
+      
+      names_to_order <- map(prefixes, ~ names(df)[grep(paste0(.x, " "), names(df))]) %>% unlist
+      names_id <- setdiff(names(df), names_to_order)
+      
+      df <- df %>%
+        select(names_id, names_to_order) %>% 
+        select(-id, id) 
+
+      # Put DL button on hold till I can figure it out properly
+      datatable(df, selection = "single", #extensions = 'FixedHeader', #extensions = 'Buttons',
+                options=list(stateSave = TRUE,
+                             dom = 'Bfrtip',
+                             scrollX = TRUE, # allows horizontal scrolling 
+                             #fixedHeader = TRUE, # freezes header,
+                             scrollY = 500,
+                             # buttons =
+                             #   list('copy', 'print', list(
+                             #     extend = 'collection',
+                             #     buttons = list(
+                             #       list(extend = 'csv',
+                             #            filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            header = TRUE),
+                             #       list(extend = 'excel', filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            title = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            header = TRUE),
+                             #       list(extend = 'pdf', filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            title = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            header = TRUE)),
+                             #     text = 'Download'
+                             #   )),
+                             rownames = FALSE),
+                fillContainer = T)
+    } else{
+      dat <- cumsurvivalVar() %>% 
+        select(GEN, RKM, Region, Survival, LCI, UCI, Count, id)
+      
+      # Put DL button on hold till I can figure it out properly
+      datatable(dat, selection = "single", #extensions = 'Buttons',
+                options=list(stateSave = TRUE,
+                             dom = 'Bfrtip',
+                             # buttons =
+                             #   list('copy', 'print', list(
+                             #     extend = 'collection',
+                             #     buttons = list(
+                             #       list(extend = 'csv',
+                             #            filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            header = TRUE),
+                             #       list(extend = 'excel', filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            title = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            header = TRUE),
+                             #       list(extend = 'pdf', filename = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            title = paste0(studyIDSelect(), "_cumulative_survival"),
+                             #            header = TRUE)),
+                             #     text = 'Download'
+                             #   )),
+                             rownames = FALSE))
+    }
+    
+
   })
   
   # to keep track of previously selected row
@@ -1343,12 +1443,7 @@ server <- function(input, output, session) {
                         "</br>",
                         "<b>RKM: </b>", 
                         row_selected$RKM,
-                        "</br>",
-                        "<b>Survival: </b>", 
-                        row_selected$Survival,
-                        "</br>",
-                        "<b># Fish: </b>",
-                        row_selected$Count
+                        "</br>"
         ),
         label = row_selected$GEN,
         layerId = as.character(row_selected$id),
@@ -1458,15 +1553,7 @@ server <- function(input, output, session) {
                         "</br>",
                         "<b>RKM: </b>", 
                         df$rkm_start, " to ", df$rkm_end,
-                        "</br>",
-                        "<b>Survival: </b>", 
-                        df$Survival,
-                        "</br>",
-                        "<b># Fish at reach start: </b>",
-                        df$count_at_start,
-                        "</br>",
-                        "<b># Fish at reach end: </b>",
-                        df$count_at_end
+                        "</br>"
         ),
         label = ~Reach
       ) %>% 
@@ -1594,17 +1681,18 @@ server <- function(input, output, session) {
       names_id <- setdiff(names(df), names_to_order)
       
       df <- df %>%
-        select(names_id, names_to_order)
+        select(names_id, names_to_order) %>% 
+        select(-id, id)
       
       
       df %>% 
         select(-c(reach_start, reach_end, rkm_start, rkm_end, Region, reach_num,
                   GenLon_start, GenLon_end, GenLat_start, GenLat_end)) %>% 
-        datatable(selection = "single", extensions = 'FixedHeader', #extensions = 'Buttons',
+        datatable(selection = "single", #extensions = 'FixedHeader', #extensions = 'Buttons',
                   options=list(stateSave = TRUE,
                                dom = 'Bfrtip',
                                scrollX = TRUE, # allows horizontal scrolling 
-                               fixedHeader = TRUE, # freezes header,
+                               #fixedHeader = TRUE, # freezes header,
                                scrollY = 500,
                                # buttons =
                                #   list('copy', 'print', list(
@@ -1661,15 +1749,7 @@ server <- function(input, output, session) {
                         "</br>",
                         "<b>RKM: </b>", 
                         row_selected$rkm_start, " to ", row_selected$rkm_end,
-                        "</br>",
-                        "<b>Survival: </b>", 
-                        row_selected$Survival,
-                        "</br>",
-                        "<b># Fish at reach start: </b>",
-                        row_selected$count_at_start,
-                        "</br>",
-                        "<b># Fish at reach end: </b>",
-                        row_selected$count_at_end
+                        "</br>"
         ),
         label = row_selected$Reach,
         layerId = as.character(row_selected$id),
@@ -1688,15 +1768,7 @@ server <- function(input, output, session) {
                                    "</br>",
                                    "<b>RKM: </b>", 
                                    prev_row2()$rkm_start, " to ", prev_row2()$rkm_end,
-                                   "</br>",
-                                   "<b>Survival: </b>", 
-                                   prev_row2()$Survival,
-                                   "</br>",
-                                   "<b># Fish at reach start: </b>",
-                                   prev_row2()$count_at_start,
-                                   "</br>",
-                                   "<b># Fish at reach end: </b>",
-                                   prev_row2()$count_at_end
+                                   "</br>"
         ), 
         layerId = as.character(prev_row2()$id),
         lng=prev_row2()$GenLon_end, 
@@ -1722,23 +1794,12 @@ server <- function(input, output, session) {
       proxy <- leafletProxy('reachSurvMap')
       proxy %>%
         addMarkers(popup = paste0( 
-          "<b>Survival: </b>", 
-          prev_row2()$Survival,
-          "<b>LCI: </b>", 
-          prev_row2()$LCI,
-          "<b>UCI: </b>", 
-          prev_row2()$UCI,
-          "</br>",
           "<b>Reach: </b>", 
           paste0(prev_row2()$reach_start, ' to ', prev_row2()$reach_end),
           "</br>",
           "<b>RKM: </b>", 
           paste0(prev_row2()$rkm_start, ' to ', prev_row2()$rkm_end),
           "</br>",
-          "<b># Count Start: </b>",
-          prev_row2()$count_at_start,
-          "</br>",
-          "<b># Count End: </b>",
           prev_row2()$count_at_end), 
           layerId = as.character(prev_row2()$id),
           lng=prev_row2()$GenLon_end, 

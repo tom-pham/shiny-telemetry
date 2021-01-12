@@ -205,13 +205,12 @@ if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
   comb_flow2 <- as.data.frame(comb_flow) %>% 
     rownames_to_column("Index")
   
-  # Close connection with comb_flow.csv so that I can overwrite it with new data
   rm(comb_flow)
   write_csv(comb_flow2, "./data/comb_flow.csv", append = T)
-  
-}else {
-  comb_flow <- as.xts(read.csv.zoo("./data/comb_flow.csv"))
+  rm(comb_flow2)
 }
+
+comb_flow <- as.xts(read.csv.zoo("./data/comb_flow.csv"))
 
 cdec_stations <- vroom("./data/cdec_stations.csv")
 
@@ -505,7 +504,13 @@ server <- function(input, output, session) {
             time is calculated in days and kilometers per day. The number of 
             unique fish detected at each receiver location is displayed as well. 
             We will update this page to display travel times in an interactive 
-            plot soon, so stay tuned.")
+            plot soon, so stay tuned."),
+          h3("Questions or comments?"),
+          p("This Shiny App was developed by UCSC/NOAA, Southwest Science 
+            Fisheries Center, Fisheries Ecology Division. If you have any
+            questions or comments please feel free to send us an ",
+            a(href="mailto:tom.pham@noaa.gov", "email"),
+            ".")
       )
     })
   })

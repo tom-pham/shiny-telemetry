@@ -30,6 +30,9 @@ library(DT)
 # --- Detections
 # --- CDEC Flows
 
+# Clear cached data in order to retrieve all latest data
+cache_delete_all()
+
 # Check for changes every 90 days
 # If last dl was > 90 days update files
 # else read in csv
@@ -37,12 +40,10 @@ library(DT)
 # Download updates every 90 days
 last_checked_date <- read_rds("last_checked_date.RDS")
 
-## Load ReceiverDeployments and TaggedFish
+## Load ReceiverDeployments 
 # If last update check was < 90 days read in CSVs (much faster load times)
 if (as.numeric(Sys.Date() - last_checked_date) < 90) {
   ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
-  TaggedFish <- vroom("./data/TaggedFish.csv")
-  
 } else { 
   # Else check if ERDDAP is online, x returns TRUE if database is down or "Timeout"
   # if the http check timeouts out 
@@ -52,7 +53,6 @@ if (as.numeric(Sys.Date() - last_checked_date) < 90) {
   # If the database isn't working then read csv
   if (x == TRUE | x == "Timeout") {
     ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
-    TaggedFish <- vroom("./data/TaggedFish.csv")
   } else {
     # If database is working then check for updates
     
@@ -92,26 +92,42 @@ if (as.numeric(Sys.Date() - last_checked_date) < 90) {
     # Save latest update to file
     write_csv(ReceiverDeployments, "./data/ReceiverDeployments.csv")
     
-    ## Download TaggedFish
-    my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
-    JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
-    
-    TaggedFish <- tabledap(JSATSinfo, url = my_url)  
-    
-    # Fix column names and correct column types
-    TaggedFish <- TaggedFish %>% 
-      mutate_at(vars(tag_weight, tag_pulse_rate_interval_nominal, tag_warranty_life,
-                     fish_length, fish_weight, release_latitude, release_longitude,
-                     release_river_km), as.numeric) 
-    
-    # Save latest update to file
-    write_csv(TaggedFish, "./data/TaggedFish.csv")
-    
     # Change the last saved date to today
     last_checked_date <- Sys.Date()
     saveRDS(last_checked_date, "last_checked_date.RDS")
   }
 }
+
+
+studyid_list <- files <- unlist(strsplit(
+  list.files("./data/Survival/Reach Survival Per 10km"), "_reach_survival.csv"))
+TaggedFish <- vroom("./data/TaggedFish.csv")
+
+
+# Update TaggedFish csv if there are new studyID files for detections/survival that 
+# have been added and aren't represented in TaggedFish yet
+if (any(!(studyid_list %in% unique(TaggedFish$study_id)))) { # Are any studyids not in the TaggedFish
+  ## Download TaggedFish
+  my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+  JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
+  
+  TaggedFish <- tabledap(JSATSinfo, url = my_url)  
+  # Fix column names and correct column types
+  TaggedFish <- TaggedFish %>% 
+    mutate_at(vars(tag_weight, tag_pulse_rate_interval_nominal, tag_warranty_life,
+                   fish_length, fish_weight, release_latitude, release_longitude,
+                   release_river_km), as.numeric) 
+  
+  closeAllConnections()
+  # Save latest update to file
+  write_csv(TaggedFish, "./data/TaggedFish.csv")
+}
+TaggedFish <- vroom("./data/TaggedFish.csv")
+
+
+
+
+
 
 # This must be manually updated
 VemcoReceiverDeployments <- vroom("./data/VemcoReceiverDeployments.csv") %>%
@@ -126,28 +142,6 @@ VemcoReceiverDeployments <- vroom("./data/VemcoReceiverDeployments.csv") %>%
 # Assigns ReceiverDeployments an ID to be able to be identifiable when clicked
 ReceiverDeployments$uid <- 1:nrow(ReceiverDeployments)
 VemcoReceiverDeployments$uid <- 1:nrow(VemcoReceiverDeployments)
-
-#### List of studyIDs relevant to the project and selectable in the app
-#### Update this list as needed to allow for additional studyIDs to be selected
-studyid_list <- c("CNFH_FMR_2019", "ColemanFall_2012", 
-                  "ColemanFall_2013", "ColemanFall_2016", "ColemanFall_2017", 
-                  "ColemanLateFall_2018", "ColemanLateFall_2019", 
-                  "ColemanLateFall_2020", "DeerCk_SH_Wild_2018", 
-                  "DeerCk_Wild 2019", "DeerCk_Wild_2017","DeerCk_Wild_2018", 
-                  "FR_Spring_2013", "FR_Spring_2014", "FR_Spring_2015", 
-                  "FR_Spring_2019","MillCk_SH_Wild_2015", "MillCk_SH_Wild_2016", 
-                  "MillCk_Wild 2019", "MillCk_Wild_2013", "MillCk_Wild_2014", 
-                  "MillCk_Wild_2015", "MillCk_Wild_2016", "MillCk_Wild_2016_DS",
-                  "MillCk_Wild_2017", "MillCk_Wild_2018", "Nimbus_Fall_2016", 
-                  "Nimbus_Fall_2017", "Nimbus_Fall_2018", "RBDD_2017", "RBDD_2018", 
-                  "SB_Spring_2015", "SB_Spring_2016", "SB_Spring_2017", 
-                  "SB_Spring_2018", "SB_Spring_2019", "Winter_H_2013", 
-                  "Winter_H_2014", "Winter_H_2015", "Winter_H_2016", 
-                  "Winter_H_2017", "Winter_H_2018", "Winter_H_2019")
-
-survivalStudyIDs <- files <- unlist(strsplit(
-  list.files("./data/Survival/Reach Survival Per 10km"), "_reach_survival.csv"))
-
 
 ## Load Hydrology data from CDEC
 
@@ -319,14 +313,14 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                                headerPanel("Select Options"),
                                                sidebarPanel(
                                                  uiOutput("cumSurvSelect"),
-                                                 helpText("Note: These survival results are 
-                                          preliminary and for discussion purposes 
-                                          only. Detection data has not been 
-                                          filtered for predator detections, and 
-                                          survival estimates have not been 
-                                          adjusted for any potential premature 
+                                                 helpText("Note: These survival results are
+                                          preliminary and for discussion purposes
+                                          only. Detection data has not been
+                                          filtered for predator detections, and
+                                          survival estimates have not been
+                                          adjusted for any potential premature
                                           tag failures."),
-                                                 radioButtons("cumsurvival_radio", 
+                                                 radioButtons("cumsurvival_radio",
                                                               "View",
                                                               c("Plot", "Table")
                                                  ),
@@ -347,14 +341,14 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                                headerPanel("Select Options"),
                                                sidebarPanel(
                                                  uiOutput("reachSurvSelect"),
-                                                 helpText("Note: These survival results are 
-                                          preliminary and for discussion purposes 
-                                          only. Detection data has not been 
-                                          filtered for predator detections, and 
-                                          survival estimates have not been 
-                                          adjusted for any potential premature 
+                                                 helpText("Note: These survival results are
+                                          preliminary and for discussion purposes
+                                          only. Detection data has not been
+                                          filtered for predator detections, and
+                                          survival estimates have not been
+                                          adjusted for any potential premature
                                           tag failures."),
-                                                 radioButtons("reachSurvRadio", 
+                                                 radioButtons("reachSurvRadio",
                                                               "View",
                                                               c("Plot", "Table")
                                                  ),
@@ -372,7 +366,7 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                                )
                                       )
                                     )
-                                    
+
                            ),
                            tabPanel("Movement",
                                     headerPanel("Select Options"),
@@ -507,7 +501,10 @@ server <- function(input, output, session) {
             plot soon, so stay tuned."),
           h3("Questions or comments?"),
           p("This Shiny App was developed by UCSC/NOAA, Southwest Science 
-            Fisheries Center, Fisheries Ecology Division. If you have any
+            Fisheries Center, Fisheries Ecology Division. Source code used to create 
+            this site can be viewed", 
+            a(href="https://github.com/pham-thomas/shiny-telemetry", "here"),
+            ".", " If you have any
             questions or comments please feel free to send us an ",
             a(href="mailto:tom.pham@noaa.gov", "email"),
             ".")
@@ -827,7 +824,7 @@ server <- function(input, output, session) {
     
     # Choose the file that matches the studyID and read it in
     file <- files[str_detect(files, input$anim_dataset)]
-    detections <- read_csv(file)
+    detections <- vroom(file)
     
     # Get release info from TaggedFish
     release <- TaggedFish %>% 
@@ -953,6 +950,12 @@ server <- function(input, output, session) {
                         "density" 	=	geom_density(alpha=.75)
     )
     
+    # Based on the user selected var type, use different labels 
+    var_lab <- switch(input$variable,
+                        "Length" 	= " (mm)",
+                        "Weight" =	" (g)"
+    )
+    
     # Create the plotly plot differently depending on plot type
     if (input$plot_type == "boxplot") {
       ggplotly(ggplot(tagged_fish, 
@@ -963,7 +966,7 @@ server <- function(input, output, session) {
                       )
       ) + 
         plot_type +
-        ylab(input$variable) +
+        ylab(paste0(input$variable, var_lab)) +
         scale_fill_brewer(palette="Accent") +
         theme_classic() +
         theme(legend.position="top", axis.text=element_text(size=12))) 
@@ -976,7 +979,8 @@ server <- function(input, output, session) {
       ) + 
         plot_type +
         scale_y_continuous(expand = c(0, 0)) +
-        xlab(input$variable) +
+        xlab(paste0(input$variable, var_lab)) +
+        ylab(ifelse(input$plot_type == 'histogram', 'Count', 'Density')) +
         scale_fill_brewer(palette="Accent") +
         theme_classic() +
         theme(legend.position="top", axis.text=element_text(size=12))) 
@@ -1011,7 +1015,7 @@ server <- function(input, output, session) {
     # Function to read in appropriate csv by given studyID
     read_detects_files <- function(studyID) {
       file <- files[str_detect(files, studyID)]
-      detections <- read_csv(file)
+      detections <- vroom(file)
     }
     
     # Read all studyID CSVs from input and bind together
@@ -1170,14 +1174,14 @@ server <- function(input, output, session) {
   output$cumSurvSelect <- renderUI({
     selectInput(inputId = "id1", 
                 label = "Select", 
-                choices = survivalStudyIDs, 
+                choices = studyid_list, 
                 selected = studyIDSelect())
   })
   
   output$reachSurvSelect <- renderUI({
     selectInput(inputId = "id2", 
                 label = "Select", 
-                choices = survivalStudyIDs, 
+                choices = studyid_list, 
                 selected = studyIDSelect())
   })
   
@@ -1196,7 +1200,7 @@ server <- function(input, output, session) {
     name <- studyIDSelect() 
     
     file <- list.files("./data/Survival/Cumulative Survival/", name, full.names = T)
-    df <- read_csv(file)
+    df <- vroom(file)
     
     df <- df %>% 
       mutate_at(c("cum.phi", "cum.phi.se", "LCI", "UCI"), round, digits = 3) %>% 
@@ -1237,7 +1241,7 @@ server <- function(input, output, session) {
                       position = position_dodge(1)) +
         scale_color_manual(values=c("#007EFF", "#FF8100")) +
         labs(
-          title = paste0("Cumulative Survival for ", name),
+          title = paste0("Cumulative Survival for ", studyIDSelect()),
           x = "RKM",
           y = "Survival",
           color = "Release"
@@ -1400,7 +1404,7 @@ server <- function(input, output, session) {
                 fillContainer = T)
     } else{
       dat <- cumsurvivalVar() %>% 
-        select(GEN, RKM, Region, Survival, LCI, UCI, Count, id)
+        select('Receiver Location' =  GEN, RKM, Region, Survival, LCI, UCI, Count, id)
       
       # Put DL button on hold till I can figure it out properly
       datatable(dat, selection = "single", #extensions = 'Buttons',
@@ -1498,7 +1502,7 @@ server <- function(input, output, session) {
     name <- studyIDSelect()
     
     file <- list.files("./data/Survival/Reach Survival Per 10km", name, full.names = T)
-    df <- read_csv(file)
+    df <- vroom(file)
     
     # If studyID contains multi rel loc, rearrange data to wide format
     if(length(unique(df$release)) > 1) {
@@ -1827,7 +1831,7 @@ server <- function(input, output, session) {
     
     read_detects_files <- function(studyID) {
       file <- files[str_detect(files, studyID)]
-      detections <- read_csv(file)
+      detections <- vroom(file)
     }
     
     df <- lapply(studyids, read_detects_files) %>% 
@@ -1839,7 +1843,7 @@ server <- function(input, output, session) {
           select(FishID = fish_id, fish_release_date, release_river_km),
         by = "FishID"
       ) %>% 
-      mutate(fish_release_date = mdy_hms(fish_release_date))
+      mutate(fish_release_date = mdy_hm(fish_release_date))
     
     # Calculate time from release to receiver and dist to receiver
     min_detects <- df %>% 

@@ -14,7 +14,6 @@ library(suncalc) # getting sunset sunrise times
 library(arsenal) # nice summary stats tables
 library(gt) # fancy tables
 library(rerddap) # ERDDAP data retrievals
-#library(slickR) # JS image carousel
 library(waiter) # Loading animations
 library(httr) # Check HTTP status for CDEC/ERDDAP
 library(vroom) # Fastest way to read csv
@@ -98,15 +97,21 @@ if (as.numeric(Sys.Date() - last_checked_date) < 90) {
   }
 }
 
-
+# Master list of studyIDs used for survival tabs
 studyid_list <- files <- unlist(strsplit(
   list.files("./data/Survival/Reach Survival Per 10km"), "_reach_survival.csv"))
+
+# Master list of studyIDs for non-survival tabs
+detections_studyid_list <- files <- unlist(strsplit(
+  list.files("./data/detections"), ".csv"))
+
+
 TaggedFish <- vroom("./data/TaggedFish.csv")
 
 
 # Update TaggedFish csv if there are new studyID files for detections/survival that 
 # have been added and aren't represented in TaggedFish yet
-if (any(!(studyid_list %in% unique(TaggedFish$study_id)))) { # Are any studyids not in the TaggedFish
+if (any(!(detections_studyid_list %in% unique(TaggedFish$study_id)))) { # Are any studyids not in the TaggedFish
   ## Download TaggedFish
   my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
   JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
@@ -255,7 +260,7 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                       sidebarPanel(
                                         selectInput("anim_dataset", "Choose a study population",
                                                     #choices = strsplit(list.files("./data/Timestep"), ".csv")),
-                                                    choices = studyid_list),
+                                                    choices = detections_studyid_list),
                                         helpText("This tool visualizes study group detection data into an animated time series",
                                                  "of fish outmigration. Unique fish detections are identified at each general",
                                                  "receiver location and summed by day. Note that is it possible for a fish to",
@@ -269,10 +274,11 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                            tabPanel("Data Explorer",
                                     headerPanel("Select Options"),
                                     sidebarPanel(
-                                      selectInput("data_explorer_datasets", "Study Populations",
-                                                  choices = studyid_list,
-                                                  multiple = TRUE,
-                                                  selectize = TRUE),
+                                      selectizeInput("data_explorer_datasets", "Study Populations",
+                                                  # Adding empty string first 
+                                                  # allows no default selection
+                                                  choices = c("", detections_studyid_list),
+                                                  options = list(maxItems = 4)),
                                       selectInput("variable", "Variable",
                                                   choices = c("Weight", "Length")),
                                       selectInput("plot_type", "Plot type", 
@@ -293,7 +299,7 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                     headerPanel("Select Options"),
                                     mainPanel(
                                       selectInput("time_of_day_input", "Choose a study population",
-                                                  choices = studyid_list
+                                                  choices = c("",detections_studyid_list),
                                       ),
                                       radioButtons("time_of_day_radio", "Choose all detections or by receiver GEN",
                                                    c("All Detections", "By General Location")
@@ -834,7 +840,7 @@ server <- function(input, output, session) {
     
     detections <- detections %>% 
       mutate(
-        date = as.Date(time),
+        date = as.Date(time_pst),
         GenLat = ifelse(SN == 1, LAT, GenLat),
         GenLon = ifelse(SN == 1, LON, GenLon),
         GenRKM = ifelse(SN == 1, release$release_river_km, GenRKM)
@@ -1022,7 +1028,7 @@ server <- function(input, output, session) {
     detections <- lapply(input$time_of_day_input, read_detects_files) %>% 
       bind_rows() %>% 
       mutate(
-        time_pst = with_tz(time, "US/Pacific"),
+        # time_pst = with_tz(time, "US/Pacific"),
         hour = hour(time_pst)
       )
     
@@ -1070,8 +1076,8 @@ server <- function(input, output, session) {
     avg_lon = mean(receivers$LON)
     
     # Get earliest date and latest dates to compare differences in these times
-    earliest_date <- as.Date(min(detections$time))
-    latest_date <- as.Date(max(detections$time))
+    earliest_date <- as.Date(min(detections$time_pst))
+    latest_date <- as.Date(max(detections$time_pst))
     
     earliest_sr_ss <- getSunlightTimes(earliest_date, 
                                        avg_lat, 
@@ -1156,10 +1162,10 @@ server <- function(input, output, session) {
   output$time_of_day_caption <- renderUI({
     
     detections <- timeofdayVar() %>% 
-      mutate(time = ymd_hms(time))
+      mutate(time_pst = ymd_hms(time_pst))
     # Get earliest date and latest dates to compare differences in these times
-    earliest_date <- as.Date(min(detections$time))
-    latest_date <- as.Date(max(detections$time))
+    earliest_date <- as.Date(min(detections$time_pst))
+    latest_date <- as.Date(max(detections$time_pst))
     
     paste0("The histogram displays the frequency of fish detections as a function of hour of day. The gray box represents \nhours of nighttime between the earliest sunrise and latest sunset. The dotted lines represent \nhours of nighttime between the latest sunrise and earliest sunset. The first date of detection was at: ", earliest_date, " and the last date of detection was at: ", latest_date, ".")
   })
@@ -1241,7 +1247,7 @@ server <- function(input, output, session) {
                       position = position_dodge(1)) +
         scale_color_manual(values=c("#007EFF", "#FF8100")) +
         labs(
-          title = paste0("Cumulative Survival for ", studyIDSelect()),
+          #title = paste0("Cumulative Survival for ", studyIDSelect()),
           x = "RKM",
           y = "Survival",
           color = "Release"
@@ -1596,7 +1602,8 @@ server <- function(input, output, session) {
     df <- reachSurvVar()
     
     # Plot differently if there is a single release vs multi
-    if(length(unique(df$release)) > 1) {
+    # Check if df has the colname 'release
+    if(any(sapply(colnames(df), str_detect, "release"))) {
       # Set the order of release groups
       df$release <- factor(df$release, unique(df$release))
       
@@ -1850,7 +1857,7 @@ server <- function(input, output, session) {
     min_detects <- df %>% 
       group_by(FishID, GEN, GenRKM, fish_release_date, release_river_km) %>% 
       summarize(
-        min_time = min(time)
+        min_time = min(time_pst)
       ) %>% 
       mutate(
         km_from_rel = release_river_km - GenRKM,

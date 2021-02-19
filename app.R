@@ -111,8 +111,7 @@ TaggedFish <- vroom("./data/TaggedFish.csv")
 
 # Update TaggedFish csv if there are new studyID files for detections/survival that 
 # have been added and aren't represented in TaggedFish yet
-if (any(!(detections_studyid_list %in% unique(TaggedFish$study_id)))) { # Are any studyids not in the TaggedFish
-  ## Download TaggedFish
+if (any(!(detections_studyid_list %in% unique(TaggedFish$study_id)))) { 
   my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
   JSATSinfo <- info('FED_JSATS_taggedfish', url = my_url)
   
@@ -127,11 +126,8 @@ if (any(!(detections_studyid_list %in% unique(TaggedFish$study_id)))) { # Are an
   # Save latest update to file
   write_csv(TaggedFish, "./data/TaggedFish.csv")
 }
+
 TaggedFish <- vroom("./data/TaggedFish.csv")
-
-
-
-
 
 
 # This must be manually updated
@@ -175,7 +171,6 @@ if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
                                                  c("20", "23"))) %>%
                        bind_rows())$start)
 
-  
   # The last date of downloaded data in comb_flow + 1
   last_date <- max(comb_flow$Index) + 1
   
@@ -213,22 +208,23 @@ comb_flow <- as.xts(read.csv.zoo("./data/comb_flow.csv"))
 
 cdec_stations <- vroom("./data/cdec_stations.csv")
 
-# UI ----------------------------------------------------------------------
+##### UI ----------------------------------------------------------------------
 
 ui <- fluidPage(theme = shinytheme("flatly"),
                 use_waitress(),
                 navbarPage("Central Valley Enhanced Acoustic Tagging Project",
                            tabPanel("Background", 
                                     mainPanel(
-                                      uiOutput("background")#,
-                                      #slickROutput("slick_output", width = '500px', height = '500px')
+                                      uiOutput("background")
                                     )
                            ),
                            tabPanel("Receiver Deployments",
                                     sidebarLayout(
                                       sidebarPanel(
-                                        radioButtons("receiverType", "Receiver type",
-                                                     c("Autonomous", "Real-time", "Vemco")
+                                        radioButtons("receiverType", 
+                                                     "Receiver type",
+                                                     c("Autonomous", 
+                                                       "Real-time", "Vemco")
                                         ),
                                         selectInput("water_year",
                                                     "Water Year:",
@@ -241,14 +237,17 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                         htmlOutput("map_marker_click")
                                       ),
                                       mainPanel(
-                                        leafletOutput("map", width = "100%", height = "650"),
+                                        leafletOutput("map", width = "100%", 
+                                                      height = "650"),
                                         dataTableOutput("receiver_table")
                                       )
                                     )
                            ),
                            tabPanel("Hydrology",
-                                    box(dygraphOutput("dygraph", width = "100%")),
-                                    box(leafletOutput("hydromap", width = "75%")),
+                                    box(dygraphOutput("dygraph", 
+                                                      width = "100%")),
+                                    box(leafletOutput("hydromap", 
+                                                      width = "75%")),
                                     textOutput("text1"),
                                     textOutput("text2"),
                                     textOutput("text3"),
@@ -258,8 +257,8 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                            tabPanel("Outmigration Animation",
                                     sidebarLayout(
                                       sidebarPanel(
-                                        selectInput("anim_dataset", "Choose a study population",
-                                                    #choices = strsplit(list.files("./data/Timestep"), ".csv")),
+                                        selectInput("anim_dataset", 
+                                                    "Choose a study population",
                                                     choices = detections_studyid_list),
                                         helpText("This tool visualizes study group detection data into an animated time series",
                                                  "of fish outmigration. Unique fish detections are identified at each general",
@@ -267,14 +266,16 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                                  "be detected at more than one general receiver location in a single day.")
                                       ),
                                       mainPanel(
-                                        leafletOutput("timemap", width = "100%", height = "650")
+                                        leafletOutput("timemap", width = "100%", 
+                                                      height = "650")
                                       )
                                     )
                            ),
                            tabPanel("Data Explorer",
                                     headerPanel("Select Options"),
                                     sidebarPanel(
-                                      selectizeInput("data_explorer_datasets", "Study Populations",
+                                      selectizeInput("data_explorer_datasets", 
+                                                     "Study Populations",
                                                   # Adding empty string first 
                                                   # allows no default selection
                                                   choices = c("", detections_studyid_list),
@@ -282,11 +283,15 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                       selectInput("variable", "Variable",
                                                   choices = c("Weight", "Length")),
                                       selectInput("plot_type", "Plot type", 
-                                                  choices = c("boxplot", "histogram", "density")),
-                                      # Show this bin width slider only if histogram is chosen
+                                                  choices = c("boxplot", 
+                                                              "histogram", 
+                                                              "density")),
+                                      # Show this bin width slider only if 
+                                      # histogram is chosen
                                       conditionalPanel(
                                         condition = "input.plot_type == 'histogram'",
-                                        # Place holder for bin slider input, created in server side
+                                        # Place holder for bin slider input, 
+                                        # created in server side
                                         uiOutput("bin_slider")
                                       )
                                     ),
@@ -298,10 +303,12 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                            tabPanel("Time of Day",
                                     headerPanel("Select Options"),
                                     mainPanel(
-                                      selectInput("time_of_day_input", "Choose a study population",
+                                      selectInput("time_of_day_input", 
+                                                  "Choose a study population",
                                                   choices = c("",detections_studyid_list),
                                       ),
-                                      radioButtons("time_of_day_radio", "Choose all detections or by receiver GEN",
+                                      radioButtons("time_of_day_radio", 
+                                                   "Choose all detections or by receiver GEN",
                                                    c("All Detections", "By General Location")
                                       ),
                                       conditionalPanel(
@@ -392,13 +399,18 @@ ui <- fluidPage(theme = shinytheme("flatly"),
 )
 
 
-# Server ------------------------------------------------------------------
+##### Server ------------------------------------------------------------------
 
 server <- function(input, output, session) {
   
   waitress <- Waitress$new("#background", infinite = T, hide_on_render = T)
   
-  # Background --------------------------------------------------------------
+##%######################################################%##
+#                                                          #
+####                    Background                      ####
+#                                                          #
+##%######################################################%##
+  
   output$background <- renderUI({
     waitress$start(h3("Loading..."))
     withTags({
@@ -518,14 +530,11 @@ server <- function(input, output, session) {
     })
   })
   
-  # output$slick_output <- renderSlickR({
-  #   imgs <- list.files("./photos/", full.names = TRUE)
-  #   slickR(imgs, width = '500px', height = '500px') +
-  #     settings(autoplay = TRUE, autoplaySpeed = 3000)
-  # })
-  
-  
-  # Receiver Deployments --------------------------------------------------
+##%######################################################%##
+#                                                          #
+####               Receiver Deployments                 ####
+#                                                          #
+##%######################################################%##
   
   # Updates allowable water_year selection input based on radio button selection
   observe({
@@ -712,9 +721,11 @@ server <- function(input, output, session) {
   })
   
   
-  
-  
-  # Hydrology  --------------------------------------------------
+##%######################################################%##
+#                                                          #
+####                     Hydrology                      ####
+#                                                          #
+##%######################################################%##
   
   # Create a dygraph - interactive flow graph of different CDEC gauges: KES, BND, BTC, WLK
   output$dygraph <- renderDygraph({
@@ -818,8 +829,11 @@ server <- function(input, output, session) {
     }
   )
   
-  
-  # Outmigration Animation  --------------------------------------------------
+##%######################################################%##
+#                                                          #
+####               Outmigration Animation               ####
+#                                                          #
+##%######################################################%##
   
   # Reactive expression that retrieves detections from ERDDAP and formats it for 
   # the time step animation
@@ -876,9 +890,6 @@ server <- function(input, output, session) {
   })
   
   # Output leaflet Outmigration Animation of fish outmigration
-  # Takes data that has been pre-processed, and visualizes magnitude of unique 
-  # detections by day at every receiver location, achieved by using 
-  # addMinicharts which takes a time argument
   output$timemap <- renderLeaflet({
     data <- timestepVar()
     
@@ -901,7 +912,11 @@ server <- function(input, output, session) {
       )
   })
   
-  # Data Explorer  --------------------------------------------------
+##%######################################################%##
+#                                                          #
+####                   Data Explorer                    ####
+#                                                          #
+##%######################################################%##
   
   # Reactive function that returns the filtered TaggedFish table by selected studyID
   taggedfishVar <-  reactive({
@@ -994,7 +1009,11 @@ server <- function(input, output, session) {
     
   })
   
-  # Time of Day -------------------------------------------------------------
+##%######################################################%##
+#                                                          #
+####                    Time of Day                     ####
+#                                                          #
+##%######################################################%##
   
   # Reactive list of GEN depending on StudyID selected
   GEN_list <-  reactive({
@@ -1171,7 +1190,11 @@ server <- function(input, output, session) {
   })
   
   
-  # Survival ----------------------------------------------------------------
+##%######################################################%##
+#                                                          #
+####                      Survival                      ####
+#                                                          #
+##%######################################################%##
   
   # Synchronize studyID selection between tabs
   # https://stackoverflow.com/questions/44516768/r-shiny-synchronize-filters-on-multiple-tabs
@@ -1247,7 +1270,6 @@ server <- function(input, output, session) {
                       position = position_dodge(1)) +
         scale_color_manual(values=c("#007EFF", "#FF8100")) +
         labs(
-          #title = paste0("Cumulative Survival for ", studyIDSelect()),
           x = "RKM",
           y = "Survival",
           color = "Release"
@@ -1255,8 +1277,7 @@ server <- function(input, output, session) {
         theme_minimal() +
         theme(
           plot.title = element_text(hjust = 0.5)
-        ) #+
-        #scale_x_reverse()
+        ) 
       
       ggplotly(p, tooltip = "text") %>% 
         layout(xaxis = list(autorange = "reversed"))
@@ -1283,24 +1304,12 @@ server <- function(input, output, session) {
                             zeroline = FALSE)) %>% 
         layout(yaxis = list(showline = FALSE,
                             zeroline = FALSE))
-      
     }
-    
-
   })
-  
   
   output$survival_map2 <- renderLeaflet({
     
     df <- cumsurvivalVar()
-    
-    # release <- TaggedFish %>% 
-    #   filter(study_id == input$cumsurvival_datasets) %>% 
-    #   select(release_location, release_latitude, release_longitude, 
-    #          release_river_km) %>% 
-    #   group_by(release_location, release_latitude, release_longitude, 
-    #            release_river_km) %>% 
-    #   summarise(count = n())
     
     df %>% 
       slice(1:(max(df$reach_num) + 1)) %>% 
@@ -1327,24 +1336,6 @@ server <- function(input, output, session) {
         ),
         label = ~GEN
       ) %>% 
-      # addMarkers(
-      #   data = release,
-      #   lng = ~release_longitude, 
-      #   lat = ~release_latitude, 
-      #   popup = paste0( "<b>Release Location: </b>"
-      #                   , release$release_location
-      #                   , "<br>"
-      #                   , "<b># Fish Tagged: </b>"
-      #                   , release$Count
-      #                   
-      #   ),
-    #   label = ~release_location,
-    #   icon = makeIcon(
-    #     iconUrl = "starred.png",
-    #     iconWidth = 25,
-    #     iconHeight = 25
-    #   )
-    # ) %>% 
     addLayersControl(
       baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
       options = layersControlOptions(collapsed = TRUE)
@@ -1356,14 +1347,10 @@ server <- function(input, output, session) {
     
     # If survival estimates contain the column 'release'
     if (any(str_detect(colnames(df), "release"))) {
-      # reaches <- cumsurvivalVar() %>% 
-      #   select(GEN, reach_num) %>% 
-      #   slice(1:(max(reach_num) + 1))
       
       df <- cumsurvivalVar() %>% 
-        select('Receiver Location' =  GEN, RKM, Region, Survival, SE, LCI, UCI, Count, release, id) #%>% 
-        # left_join(reaches,
-        #           by = c("Receiver Location" = "GEN"))
+        select('Receiver Location' =  GEN, RKM, Region, Survival, SE, LCI, UCI, 
+               Count, release, id)
       # manual method here: https://stackoverflow.com/questions/60399441/tidyrpivot-wider-reorder-column-names-grouping-by-name-from
       prefixes <- unique(df$release)
       
@@ -1378,7 +1365,8 @@ server <- function(input, output, session) {
         ) %>%
         mutate(id = row_number())
       
-      names_to_order <- map(prefixes, ~ names(df)[grep(paste0(.x, " "), names(df))]) %>% unlist
+      names_to_order <- map(prefixes, ~ names(df)[grep(paste0(.x, " "), 
+                                                       names(df))]) %>% unlist
       names_id <- setdiff(names(df), names_to_order)
       
       df <- df %>%
@@ -1434,8 +1422,6 @@ server <- function(input, output, session) {
                              #   )),
                              rownames = FALSE))
     }
-    
-
   })
   
   # to keep track of previously selected row
@@ -1446,7 +1432,6 @@ server <- function(input, output, session) {
   
   # new icon style for release site
   my_icon2 = makeAwesomeIcon(icon = 'star', markerColor = 'purple', iconColor = 'white')
-  
   
   # https://stackoverflow.com/questions/48781380/shiny-how-to-highlight-an-object-on-a-leaflet-map-when-selecting-a-record-in-a
   observeEvent(input$cumSurvDT_rows_selected, {
@@ -1539,8 +1524,6 @@ server <- function(input, output, session) {
         ) %>% 
         filter(reach_end != "GoldenGateW")
     }
-    
-    
   })
   
   output$reachSurvMap <- renderLeaflet({
@@ -1825,8 +1808,12 @@ server <- function(input, output, session) {
   })
   
   
-  # Movement ----------------------------------------------------------------
-  
+##%######################################################%##
+#                                                          #
+####                      Movement                      ####
+#                                                          #
+##%######################################################%##
+
   # Takes user selected studyIDs and retrieves data from ERDDAP
   movementVar <-  reactive({
     req(input$movement_dataset)
@@ -1918,10 +1905,7 @@ server <- function(input, output, session) {
         label = "Travel rate (km/day)",
         columns = vars(mean_km_day, median_km_day)
       )
-    
   })  
-  
 }
-
 
 shinyApp(ui = ui, server = server)

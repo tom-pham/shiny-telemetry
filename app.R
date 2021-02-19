@@ -16,7 +16,7 @@ library(gt) # fancy tables
 library(rerddap) # ERDDAP data retrievals
 #library(slickR) # JS image carousel
 library(waiter) # Loading animations
-# library(httr) # Check HTTP status for CDEC/ERDDAP
+library(httr) # Check HTTP status for CDEC/ERDDAP
 library(vroom) # Fastest way to read csv
 library(sf) # To display gis layers
 library(DT)
@@ -1249,10 +1249,11 @@ server <- function(input, output, session) {
         theme_minimal() +
         theme(
           plot.title = element_text(hjust = 0.5)
-        ) +
-        scale_x_reverse()
+        ) #+
+        #scale_x_reverse()
       
-      ggplotly(p, tooltip = "text")
+      ggplotly(p, tooltip = "text") %>% 
+        layout(xaxis = list(autorange = "reversed"))
     } else {
       df %>% 
         plot_ly(x = ~RKM, y = ~Survival, type = 'scatter', mode = 'lines+markers',

@@ -208,7 +208,11 @@ comb_flow <- as.xts(read.csv.zoo("./data/comb_flow.csv"))
 
 cdec_stations <- vroom("./data/cdec_stations.csv")
 
-##### UI ----------------------------------------------------------------------
+##%######################################################%##
+#                                                          #
+####                         UI                         ####
+#                                                          #
+##%######################################################%##
 
 ui <- fluidPage(theme = shinytheme("flatly"),
                 use_waitress(),
@@ -399,7 +403,11 @@ ui <- fluidPage(theme = shinytheme("flatly"),
 )
 
 
-##### Server ------------------------------------------------------------------
+##%######################################################%##
+#                                                          #
+####                       Server                       ####
+#                                                          #
+##%######################################################%##
 
 server <- function(input, output, session) {
   
@@ -765,15 +773,13 @@ server <- function(input, output, session) {
         data = rivers, color = "#668db3",
         weight = 3, opacity = 1
       ) %>% 
-      addProviderTiles(
-        providers$Stamen.Terrain, group = "Stamen Terrain",
-        options = providerTileOptions(noWrap = TRUE)) %>% 
-      addProviderTiles(
-        providers$Stamen.TonerLite, group = "Stamen Toner Lite",
-        options = providerTileOptions(noWrap = TRUE)) %>%
-      addProviderTiles(
-        providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
-        options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(providers$Stamen.Terrain, group = "Stamen Terrain",
+                       options = providerTileOptions(noWrap = TRUE)) %>% 
+      addTiles(group = "Open Street Map") %>% 
+      addProviderTiles(providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
+                       options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(providers$Esri.WorldImagery, group = "Esri World Imagery",
+                       options = providerTileOptions(noWrap = TRUE)) %>%
       setView(mean(cdec_stations$longitude), mean(cdec_stations$latitude), 7) %>% 
       addCircleMarkers(
         ~longitude, ~latitude, 
@@ -787,7 +793,8 @@ server <- function(input, output, session) {
           direction = "right", 
           offset = c(10,0))) %>% 
       addLayersControl(
-        baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
+        baseGroups = c("Stamen Terrain", "Open Street Map", "Esri Nat Geo", 
+                       "Esri World Imagery"),
         options = layersControlOptions(collapsed = FALSE)
       )
   })
@@ -894,7 +901,13 @@ server <- function(input, output, session) {
     data <- timestepVar()
     
     leaflet(data = data, width = "100%", height = "800px") %>%
-      addProviderTiles(providers$Stamen.TerrainBackground) %>%
+      addProviderTiles(providers$Stamen.Terrain, group = "Stamen Terrain",
+                       options = providerTileOptions(noWrap = TRUE)) %>% 
+      addTiles(group = "Open Street Map") %>% 
+      addProviderTiles(providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
+                       options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(providers$Esri.WorldImagery, group = "Esri World Imagery",
+                       options = providerTileOptions(noWrap = TRUE)) %>%
       setView(mean(data$GenLon), mean(data$GenLat), 7) %>%
       addMinicharts(
         data$GenLon, data$GenLat,
@@ -909,6 +922,12 @@ server <- function(input, output, session) {
         ),
         showLabels = TRUE,
         opacity = .7
+      ) %>% 
+      # Give control for selecting basemaps
+      addLayersControl(
+        baseGroups = c("Stamen Terrain", "Open Street Map", "Esri Nat Geo", 
+                       "Esri World Imagery"),
+        options = layersControlOptions(collapsed = FALSE)
       )
   })
   
@@ -1315,15 +1334,13 @@ server <- function(input, output, session) {
       slice(1:(max(df$reach_num) + 1)) %>% 
       # filter(reach_num != 0) %>% 
       leaflet() %>% 
-      addProviderTiles(
-        providers$Stamen.Terrain, group = "Stamen Terrain",
-        options = providerTileOptions(noWrap = TRUE)) %>% 
-      addProviderTiles(
-        providers$Stamen.TonerLite, group = "Stamen Toner Lite",
-        options = providerTileOptions(noWrap = TRUE)) %>%
-      addProviderTiles(
-        providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
-        options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(providers$Stamen.Terrain, group = "Stamen Terrain",
+                       options = providerTileOptions(noWrap = TRUE)) %>% 
+      addTiles(group = "Open Street Map") %>% 
+      addProviderTiles(providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
+                       options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(providers$Esri.WorldImagery, group = "Esri World Imagery",
+                       options = providerTileOptions(noWrap = TRUE)) %>%
       addMarkers(
         ~GenLon, ~GenLat, 
         layerId = as.character(df$id),
@@ -1336,10 +1353,12 @@ server <- function(input, output, session) {
         ),
         label = ~GEN
       ) %>% 
-    addLayersControl(
-      baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
-      options = layersControlOptions(collapsed = TRUE)
-    )
+      # Give control for selecting basemaps
+      addLayersControl(
+        baseGroups = c("Stamen Terrain", "Open Street Map", "Esri Nat Geo", 
+                       "Esri World Imagery"),
+        options = layersControlOptions(collapsed = FALSE)
+      )
   })
   
   output$cumSurvDT <- renderDataTable({
@@ -1535,15 +1554,13 @@ server <- function(input, output, session) {
       # need one set
       dplyr::slice(1:max(df$reach_num)) %>% 
       leaflet() %>% 
-      addProviderTiles(
-        providers$Stamen.Terrain, group = "Stamen Terrain",
-        options = providerTileOptions(noWrap = TRUE)) %>% 
-      addProviderTiles(
-        providers$Stamen.TonerLite, group = "Stamen Toner Lite",
-        options = providerTileOptions(noWrap = TRUE)) %>%
-      addProviderTiles(
-        providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
-        options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(providers$Stamen.Terrain, group = "Stamen Terrain",
+                       options = providerTileOptions(noWrap = TRUE)) %>% 
+      addTiles(group = "Open Street Map") %>% 
+      addProviderTiles(providers$Esri.NatGeoWorldMap, group = "Esri Nat Geo",
+                       options = providerTileOptions(noWrap = TRUE)) %>%
+      addProviderTiles(providers$Esri.WorldImagery, group = "Esri World Imagery",
+                       options = providerTileOptions(noWrap = TRUE)) %>%
       addMarkers(
         ~GenLon_end, ~GenLat_end, 
         layerId = df$id,
@@ -1574,8 +1591,9 @@ server <- function(input, output, session) {
         icon = my_icon2
       ) %>%
       addLayersControl(
-        baseGroups = c("Stamen Terrain", "Stamen Toner Lite", "Esri Nat Geo"),
-        options = layersControlOptions(collapsed = TRUE)
+        baseGroups = c("Stamen Terrain", "Open Street Map", "Esri Nat Geo", 
+                       "Esri World Imagery"),
+        options = layersControlOptions(collapsed = FALSE)
       )
   })
   

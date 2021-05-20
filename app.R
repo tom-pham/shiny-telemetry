@@ -337,6 +337,7 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                           survival estimates have not been
                                           adjusted for any potential premature
                                           tag failures."),
+                                                 uiOutput("cumsurvival_text"),
                                                  radioButtons("cumsurvival_radio",
                                                               "View",
                                                               c("Plot", "Table")
@@ -350,7 +351,8 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                                  ),
                                                  conditionalPanel(
                                                    condition = "input.cumsurvival_radio == 'Table'",
-                                                   dataTableOutput('cumSurvDT')
+                                                   dataTableOutput('cumSurvDT'),
+                                                   downloadButton("cumSurvDownload")
                                                  )
                                                )
                                       ),
@@ -365,6 +367,7 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                           survival estimates have not been
                                           adjusted for any potential premature
                                           tag failures."),
+                                                 uiOutput("reachSurv_text"),
                                                  radioButtons("reachSurvRadio",
                                                               "View",
                                                               c("Plot", "Table")
@@ -378,7 +381,8 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                                  ),
                                                  conditionalPanel(
                                                    condition = "input.reachSurvRadio == 'Table'",
-                                                   dataTableOutput('reachSurvDT')
+                                                   dataTableOutput('reachSurvDT'),
+                                                   downloadButton("reachSurvDownload")
                                                  )
                                                )
                                       )
@@ -1264,6 +1268,15 @@ server <- function(input, output, session) {
       )
   })
   
+  
+  output$cumsurvival_text <- renderUI({
+    sample_size <- cumsurvivalVar() %>% 
+      select("Count") %>% 
+      slice(1)
+    
+    tags$h4(paste0("Number of fish tagged: ", sample_size))
+  })
+  
   output$plotly_survival_output <- renderPlotly({
     
     df <- cumsurvivalVar()
@@ -1443,6 +1456,25 @@ server <- function(input, output, session) {
     }
   })
   
+  # Create download button from cumulative file
+  output$cumSurvDownload <- downloadHandler(
+    
+    # Use the file name of the cumulative survival csv 
+    filename = function() {
+      name <- studyIDSelect() 
+      
+      file <- list.files("./data/Survival/Cumulative Survival/", name)
+    },
+    content = function(con) {
+      name <- studyIDSelect() 
+      
+      file <- list.files("./data/Survival/Cumulative Survival/", name, 
+                         full.names = T)
+      
+      file.copy(file, con)
+    }
+  )
+  
   # to keep track of previously selected row
   prev_row <- reactiveVal()
   
@@ -1543,6 +1575,14 @@ server <- function(input, output, session) {
         ) %>% 
         filter(reach_end != "GoldenGateW")
     }
+  })
+  
+  output$reachSurv_text <- renderUI({
+    sample_size <- cumsurvivalVar() %>% 
+      select("Count") %>% 
+      slice(1)
+    
+    tags$h4(paste0("Number of fish tagged: ", sample_size))
   })
   
   output$reachSurvMap <- renderLeaflet({
@@ -1752,6 +1792,25 @@ server <- function(input, output, session) {
     
 
   })
+  
+  # Create download button from cumulative file
+  output$reachSurvDownload <- downloadHandler(
+    
+    # Use the file name of the cumulative survival csv 
+    filename = function() {
+      name <- studyIDSelect() 
+      
+      file <- list.files("./data/Survival/Reach Survival Per 10km/", name)
+    },
+    content = function(con) {
+      name <- studyIDSelect() 
+      
+      file <- list.files("./data/Survival/Reach Survival Per 10km/", name, 
+                         full.names = T)
+      
+      file.copy(file, con)
+    }
+  )
   
   # to keep track of previously selected row
   prev_row2 <- reactiveVal()

@@ -1,0 +1,12 @@
+name: "my-website"
+navbar:
+  title: "Shiny Telemetry Documentation"
+  left:
+    - text: "Shiny Background"
+      href: index.html
+    - text: "Data Sources"
+      href: data-sources.html
+      
+output:
+  html_document:
+    theme: sandstone

@@ -1,0 +1,44 @@
+---
+title: "Shiny Background"
+author: "Tom Pham"
+date: "5/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## What is Shiny?
+Shiny is a framework for creating web applications using R code. <br>
+
+
+## Shiny Basic Concepts
+
+There are two fundamental ways to create a Shiny app. The first is to have a 
+single file called app.R. This file will tell Shiny how your app should look
+and how it should behave. <br>
+
+
+The second way is to to split up the app into 2 files. ui.R and server.R. What
+this does is separate the code that defines how you want the app to look (ui.R)
+from the code that defines how you want the app to behave (server.R). For my
+telemetry app, I've chosen to go with the former. <br>
+
+
+A minimal example of an app might look like this: <br>
+```{r, eval=FALSE}
+library(shiny)
+ui <- fluidPage(
+  "Hello, world!"
+)
+server <- function(input, output, session) {
+}
+shinyApp(ui, server)
+```
+
+## UI Basics
+The user interface is where you define the layout of the app
+
+Here is a list of all possible UI Layout functions:
+

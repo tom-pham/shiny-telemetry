@@ -1,0 +1,227 @@
+---
+title: "Data Sources"
+---
+
+Here I will outline each page's data source, how it is stored, and whether it
+is dynamic and must be updated.
+
+## Receiver Deployments
+This page displays locations of receiver deployments (JSATS, Real-time, and Vemco).
+
+```{r, echo=FALSE, message=FALSE}
+library(DT)
+library(dplyr)
+dat <- tibble(
+  Data = c("JSATS and Real-time deployments", "Vemco deployments"),
+  Source = c("ERDDAP (FED_JSATS_receivers)", "UC Davis .csv"),
+  Update = c("Yes", "Yes")
+)
+
+datatable(dat, rownames = FALSE)
+```
+
+There are two sources of data for the Receiver Deployments tab. First the 
+JSATS (autonomous) and Real-time deployments come from ERDAPP through the 
+FED_JSATS_receivers table. This data is managed by Arnold and is updated on the
+server quarterly or so. To maximize the performance speed of the app, there
+are no data calls to ERDAPP which is slow. Instead, data is retrieved from 
+ERDAPP but stored locally in a .csv. The Shiny app currently has a local csv
+copy of the receiver deployments data from ERDAPP as /data/ReceiverDeployments.csv.
+The app.R script has in place an automated process re-downloads a copy of the 
+receiver deployments on ERDAPP every 90 days. <br />
+```{r, eval=FALSE, echo=TRUE}
+# Download updates every 90 days
+last_checked_date <- read_rds("last_checked_date.RDS")
+
+## Load ReceiverDeployments 
+# If last update check was < 90 days read in CSVs (much faster load times)
+if (as.numeric(Sys.Date() - last_checked_date) < 90) {
+  ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
+} else { 
+  # Else check if ERDDAP is online, x returns TRUE if database is down or "Timeout"
+  # if the http check timeouts out 
+  x <- tryCatch(http_error("oceanview.pfeg.noaa.gov/erddap/tabledap/FED_JSATS_receivers.html", 
+                           timeout(3)), error=function(e) print("Timeout"))
+  
+  # If the database isn't working then read csv
+  if (x == TRUE | x == "Timeout") {
+    ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
+  } else {
+    # If database is working then check for updates
+    
+    ## Download ReceiverDeployments
+    my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
+    JSATSinfo <- info('FED_JSATS_receivers', url = my_url)
+    ReceiverDeployments <- tabledap(JSATSinfo, url = my_url)  
+    
+    # Fix column names and correct column types
+    ReceiverDeployments <- ReceiverDeployments %>% 
+      rename(
+        SN = receiver_serial_number,
+        GEN = receiver_general_location,
+        Region = receiver_region,
+        GPSname = receiver_location,
+        LAT = latitude,
+        LON = longitude,
+        RKM = receiver_river_km,
+        GenLat = receiver_general_latitude,
+        GenLon = receiver_general_longitude,
+        GenRKM = receiver_general_river_km,
+        RecMake = receiver_make,
+        StartTime = receiver_start,
+        EndTime = receiver_end
+      ) %>% 
+      mutate_at(vars(SN, LAT, LON, RKM, GenLat, GenLon, GenRKM), as.numeric) %>% 
+      mutate(
+        StartTime = mdy_hm(StartTime),
+        EndTime = mdy_hm(EndTime),
+        water_year = ifelse(month(StartTime) <= 9, year(StartTime),
+                            year(StartTime) + 1)
+      ) %>% 
+      filter(
+        SN != 1
+      )
+    
+    # Save latest update to file
+    write_csv(ReceiverDeployments, "./data/ReceiverDeployments.csv")
+    
+    # Change the last saved date to today
+    last_checked_date <- Sys.Date()
+    saveRDS(last_checked_date, "last_checked_date.RDS")
+  }
+}
+```
+Above is the code that deals with JSATS/Real-time receiver deployments data.
+The first thing to note is the "last_checked_date.RDS". This is simply an R
+data type that stores a single object, in this case I'm saving a single date
+for the last time I downloaded receiver deployments data. The code reads this 
+date and checks if today is less than 90 days since the last checked date.
+If TRUE, then I go ahead and read in the current ReceiverDeployments.csv that I
+have stored. If FALSE, then I want to update this from ERDAPP. The
+<code>tryCatch()</code> function is used because, occasionally ERDDAP goes 
+offline. This essentially checks the online status of ERDDAP. If it it offline, 
+it says use the existing data, otherwise connect to ERDDAP and proceed to 
+download new data. The following chunks simply format and rename the columns to 
+my liking, saves it to .csv, and updates the "last_checked_date.RDS" to the 
+current date. <br />
+
+
+The Vemco data is trickier. There is no central database for Vemco deployments,
+so this data currently is cobbled together from requests by UC Davis staff.
+This data is stored in /data/VemcoReceiverDeployments.csv. Future updates will
+require emailing UCD staff for more deployments data. <br />
+
+## Hydrology
+This page displays Sacramento River flows at different locations in the river. 
+Specifically at Keswick, Bend, Butte City, and Wilkin's Slough. <br />
+```{r, echo=FALSE}
+library(DT)
+library(dplyr)
+dat <- tibble(
+  Data = c("CDEC River Flow", "CDEC Gauge Locations", "Sacramento River Line"),
+  Source = c("CDEC", "CDEC", "NHD"),
+  Update = c("Yes", "No", "No")
+)
+
+datatable(dat, rownames = FALSE, )
+```
+
+The only thing that needs to update on this page is the .csv containing river
+flow values stored at ./data/comb_flow.csv. The app currently automates this 
+process and updates the data every 30 days. I set it to every 30 days because
+I noticed that CDEC was quite often down and was slow to check for it's online
+status. Unlike the receiver deployments, there is date information in the file,
+so I simply checked the last date to see when it was last downloaded. <br />
+
+```{r, eval=TRUE, echo=TRUE}
+library(vroom)
+# Gather flow data from CDEC, save to file to reduce calls to CDEC which is 
+# intermittently down
+comb_flow <- vroom("C:/Users/Tom/Documents/GitHub/shiny-telemetry/data/comb_flow.csv", col_types = c(Index = "D", KES = "d",
+                                                         BND = "d", BTC = "d",
+                                                         WLK = "d"))
+
+slice_tail(comb_flow, n = 5)
+```
+
+Here I am reading in the csv of flow data I have saved from CDEC. The 
+<code>col_types</code> sets Index to be of type **date**, and KES, BND, 
+BTC, and WLK to type **double**. <br />
+
+```{r, eval=FALSE, echo=TRUE}
+# Update file with new flow data if it has been over 30 days since last download
+if (as.numeric(Sys.Date() - max(comb_flow$Index)) > 30) {
+  # Choose CDEC gauges to display
+  gauges <- c("KES", "BND", "BTC", "WLK")
+
+  # The last date of downloaded data in comb_flow + 1
+  last_date <- max(comb_flow$Index) + 1
+  
+  # apply the list of gauges to function that queries CDEC to get daily flow 
+  # then turns it into an xts (time series object) object which is needed for dygraphs
+  flows = lapply(gauges,
+                 function(x) {
+                   if (x == "KES") { # If Keswick, use reservoir outflow (23) instead 
+                     y <- cdec_query(x, 23, "D", last_date, Sys.Date())
+                   }else {
+                     y <- cdec_query(x, 41, "D", last_date, Sys.Date())
+                   }
+                   y <- y %>% 
+                     select(location_id, datetime, parameter_value) %>% 
+                     drop_na() %>% 
+                     filter(parameter_value > 0)
+                   y <- as.xts(y$parameter_value,y$datetime, order.by = y$datetime)
+                 }
+  )
+  
+  comb_flow <- do.call(cbind, flows)
+  names(comb_flow) <- gauges
+  
+  # Convert XTS to dataframe and add the Index as a column which is date
+  # Step necessary because write.zoo doesn't allow overwrites
+  comb_flow2 <- as.data.frame(comb_flow) %>% 
+    rownames_to_column("Index")
+  
+  rm(comb_flow)
+  write_csv(comb_flow2, "./data/comb_flow.csv", append = T)
+  rm(comb_flow2)
+}
+
+comb_flow <- as.xts(read.csv.zoo("./data/comb_flow.csv"))
+
+cdec_stations <- vroom("./data/cdec_stations.csv")
+```
+In this code block, I make updates to the comb_flow.csv river flows data if
+the last date in the file is over 30 days past from current date. I use 
+<code>CDECRetrieve</code> to get flow values for each of the gauges. I only
+need to grab data from the last date + 1 day to the current date. I apply
+the list of gauges (KES, BND, BTC, WLK) to this function I created. I can't
+outright apply on <code>cdec_query</code> because some of the gauges require 
+different arguments. I have to use 23 for the sensor type for KES but 41 for
+all the others. The last part selects only the information that I want which is:
+gauge id, datetime, and parameter value (flow cfs). After that is done, I combine
+them into one dataframe. <br />
+
+```{r, eval=FALSE, echo=TRUE}
+  # Convert XTS to dataframe and add the Index as a column which is date
+  # Step necessary because write.zoo doesn't allow overwrites
+  comb_flow2 <- as.data.frame(comb_flow) %>% 
+    rownames_to_column("Index")
+  
+  rm(comb_flow)
+  write_csv(comb_flow2, "./data/comb_flow.csv", append = T)
+  rm(comb_flow2)
+```
+
+This part may seem a little confusing. What's going on here is I'm taking the 
+newly acquired flow data and calling it comb_flow2, because I don't want to 
+overwrite the existing data which is named comb_flow. I call 
+<code>rownames_to_column("Index)</code> which converts the rowname to "Index".
+It then appends these values to the existing .csv. <br />
+
+```{r, eval=FALSE, echo=TRUE}
+comb_flow <- as.xts(read.csv.zoo("./data/comb_flow.csv"))
+
+```
+Finally, the script reads in the comb_flow.csv but in order for it to be displayed
+properly with dygraphs, it must be in **xts** format. <br />

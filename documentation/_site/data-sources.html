@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+
+
+<title>Data Sources</title>
+
+<script src="site_libs/jquery-1.12.4/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/sandstone.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<link href="site_libs/anchor-sections-1.0/anchor-sections.css" rel="stylesheet" />
+<script src="site_libs/anchor-sections-1.0/anchor-sections.js"></script>
+<script src="site_libs/htmlwidgets-1.5.1/htmlwidgets.js"></script>
+<link href="site_libs/datatables-css-0.0.0/datatables-crosstalk.css" rel="stylesheet" />
+<script src="site_libs/datatables-binding-0.15/datatables.js"></script>
+<link href="site_libs/dt-core-1.10.20/css/jquery.dataTables.min.css" rel="stylesheet" />
+<link href="site_libs/dt-core-1.10.20/css/jquery.dataTables.extra.css" rel="stylesheet" />
+<script src="site_libs/dt-core-1.10.20/js/jquery.dataTables.min.js"></script>
+<link href="site_libs/crosstalk-1.1.0.1/css/crosstalk.css" rel="stylesheet" />
+<script src="site_libs/crosstalk-1.1.0.1/js/crosstalk.min.js"></script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+</style>
+
+
+<style type="text/css">
+/* padding for bootstrap navbar */
+body {
+  padding-top: 61px;
+  padding-bottom: 40px;
+}
+/* offset scroll position for anchor links (for fixed navbar)  */
+.section h1 {
+  padding-top: 66px;
+  margin-top: -66px;
+}
+.section h2 {
+  padding-top: 66px;
+  margin-top: -66px;
+}
+.section h3 {
+  padding-top: 66px;
+  margin-top: -66px;
+}
+.section h4 {
+  padding-top: 66px;
+  margin-top: -66px;
+}
+.section h5 {
+  padding-top: 66px;
+  margin-top: -66px;
+}
+.section h6 {
+  padding-top: 66px;
+  margin-top: -66px;
+}
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #ffffff;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script>
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.parent().addClass('active');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">Shiny Telemetry Documentation</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Shiny Background</a>
+</li>
+<li>
+  <a href="data-sources.html">Data Sources</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Data Sources</h1>
+
+</div>
+
+
+<p>Here I will outline each page’s data source, how it is stored, and whether it is dynamic and must be updated.</p>
+<div id="receiver-deployments" class="section level2">
+<h2>Receiver Deployments</h2>
+<p>This page displays locations of receiver deployments (JSATS, Real-time, and Vemco).</p>
+<div id="htmlwidget-331ed23dc9b993898ce0" style="width:100%;height:auto;" class="datatables html-widget"></div>
+<script type="application/json" data-for="htmlwidget-331ed23dc9b993898ce0">{"x":{"filter":"none","data":[["JSATS and Real-time deployments","Vemco deployments"],["ERDDAP (FED_JSATS_receivers)","UC Davis .csv"],["Yes","Yes"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>Data<\/th>\n      <th>Source<\/th>\n      <th>Update<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script>
+<p>There are two sources of data for the Receiver Deployments tab. First the JSATS (autonomous) and Real-time deployments come from ERDAPP through the FED_JSATS_receivers table. This data is managed by Arnold and is updated on the server quarterly or so. To maximize the performance speed of the app, there are no data calls to ERDAPP which is slow. Instead, data is retrieved from ERDAPP but stored locally in a .csv. The Shiny app currently has a local csv copy of the receiver deployments data from ERDAPP as /data/ReceiverDeployments.csv. The app.R script has in place an automated process re-downloads a copy of the receiver deployments on ERDAPP every 90 days. <br /></p>
+<p>Above is the code that deals with JSATS/Real-time receiver deployments data. The first thing to note is the “last_checked_date.RDS”. This is simply an R data type that stores a single object, in this case I’m saving a single date for the last time I downloaded receiver deployments data. The code reads this date and checks if today is less than 90 days since the last checked date. If TRUE, then I go ahead and read in the current ReceiverDeployments.csv that I have stored. If FALSE, then I want to update this from ERDAPP. The <code>tryCatch()</code> function is used because, occasionally ERDDAP goes offline. This essentially checks the online status of ERDDAP. If it it offline, it says use the existing data, otherwise connect to ERDDAP and proceed to download new data. The following chunks simply format and rename the columns to my liking, saves it to .csv, and updates the “last_checked_date.RDS” to the current date. <br /></p>
+<p>The Vemco data is trickier. There is no central database for Vemco deployments, so this data currently is cobbled together from requests by UC Davis staff. This data is stored in /data/VemcoReceiverDeployments.csv. Future updates will require emailing UCD staff for more deployments data. <br /></p>
+</div>
+<div id="hydrology" class="section level2">
+<h2>Hydrology</h2>
+<p>This page displays Sacramento River flows at different locations in the river. Specifically at Keswick, Bend, Butte City, and Wilkin’s Slough. <br /> <div id="htmlwidget-00ded67d0e02c606fe7e" style="width:100%;height:auto;" class="datatables html-widget"></div>
+<script type="application/json" data-for="htmlwidget-00ded67d0e02c606fe7e">{"x":{"filter":"none","data":[["CDEC River Flow","CDEC Gauge Locations","Sacramento River Line"],["CDEC","CDEC","NHD"],["Yes","No","No"]],"container":"<table class=\"display\">\n  <thead>\n    <tr>\n      <th>Data<\/th>\n      <th>Source<\/th>\n      <th>Update<\/th>\n    <\/tr>\n  <\/thead>\n<\/table>","options":{"order":[],"autoWidth":false,"orderClasses":false}},"evals":[],"jsHooks":[]}</script></p>
+<p>The only thing that needs to update on this page is the .csv containing river flow values stored at ./data/comb_flow.csv. The app currently automates this process and updates the data every 30 days. I set it to every 30 days because I noticed that CDEC was quite often down and was slow to check for it’s online status. Unlike the receiver deployments, there is date information in the file, so I simply checked the last date to see when it was last downloaded. <br /></p>
+<pre class="r"><code>library(vroom)
+# Gather flow data from CDEC, save to file to reduce calls to CDEC which is 
+# intermittently down
+comb_flow &lt;- vroom(&quot;C:/Users/Tom/Documents/GitHub/shiny-telemetry/data/comb_flow.csv&quot;, col_types = c(Index = &quot;D&quot;, KES = &quot;d&quot;,
+                                                         BND = &quot;d&quot;, BTC = &quot;d&quot;,
+                                                         WLK = &quot;d&quot;))
+
+slice_tail(comb_flow, n = 5)</code></pre>
+<pre><code>## # A tibble: 5 x 5
+##   Index        KES   BND   BTC   WLK
+##   &lt;date&gt;     &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
+## 1 2021-05-15  8827  9754  6318  4991
+## 2 2021-05-16  8819  9715  6398  4944
+## 3 2021-05-17  8815  9681  6475  5132
+## 4 2021-05-18  8822  9659  6491  5264
+## 5 2021-05-19  8700  9575  6559  5362</code></pre>
+<p>Here I am reading in the csv of flow data I have saved from CDEC. The <code>col_types</code> sets Index to be of type <strong>date</strong>, and KES, BND, BTC, and WLK to type <strong>double</strong>. <br /></p>
+<pre class="r"><code># Update file with new flow data if it has been over 30 days since last download
+if (as.numeric(Sys.Date() - max(comb_flow$Index)) &gt; 30) {
+  # Choose CDEC gauges to display
+  gauges &lt;- c(&quot;KES&quot;, &quot;BND&quot;, &quot;BTC&quot;, &quot;WLK&quot;)
+
+  # The last date of downloaded data in comb_flow + 1
+  last_date &lt;- max(comb_flow$Index) + 1
+  
+  # apply the list of gauges to function that queries CDEC to get daily flow 
+  # then turns it into an xts (time series object) object which is needed for dygraphs
+  flows = lapply(gauges,
+                 function(x) {
+                   if (x == &quot;KES&quot;) { # If Keswick, use reservoir outflow (23) instead 
+                     y &lt;- cdec_query(x, 23, &quot;D&quot;, last_date, Sys.Date())
+                   }else {
+                     y &lt;- cdec_query(x, 41, &quot;D&quot;, last_date, Sys.Date())
+                   }
+                   y &lt;- y %&gt;% 
+                     select(location_id, datetime, parameter_value) %&gt;% 
+                     drop_na() %&gt;% 
+                     filter(parameter_value &gt; 0)
+                   y &lt;- as.xts(y$parameter_value,y$datetime, order.by = y$datetime)
+                 }
+  )
+  
+  comb_flow &lt;- do.call(cbind, flows)
+  names(comb_flow) &lt;- gauges
+  
+  # Convert XTS to dataframe and add the Index as a column which is date
+  # Step necessary because write.zoo doesn&#39;t allow overwrites
+  comb_flow2 &lt;- as.data.frame(comb_flow) %&gt;% 
+    rownames_to_column(&quot;Index&quot;)
+  
+  rm(comb_flow)
+  write_csv(comb_flow2, &quot;./data/comb_flow.csv&quot;, append = T)
+  rm(comb_flow2)
+}
+
+comb_flow &lt;- as.xts(read.csv.zoo(&quot;./data/comb_flow.csv&quot;))
+
+cdec_stations &lt;- vroom(&quot;./data/cdec_stations.csv&quot;)</code></pre>
+<p>In this code block, I make updates to the comb_flow.csv river flows data if the last date in the file is over 30 days past from current date. I use <code>CDECRetrieve</code> to get flow values for each of the gauges. I only need to grab data from the last date + 1 day to the current date. I apply the list of gauges (KES, BND, BTC, WLK) to this function I created. I can’t outright apply on <code>cdec_query</code> because some of the gauges require different arguments. I have to use 23 for the sensor type for KES but 41 for all the others. The last part selects only the information that I want which is: gauge id, datetime, and parameter value (flow cfs). After that is done, I combine them into one dataframe. <br /></p>
+<pre class="r"><code>  # Convert XTS to dataframe and add the Index as a column which is date
+  # Step necessary because write.zoo doesn&#39;t allow overwrites
+  comb_flow2 &lt;- as.data.frame(comb_flow) %&gt;% 
+    rownames_to_column(&quot;Index&quot;)
+  
+  rm(comb_flow)
+  write_csv(comb_flow2, &quot;./data/comb_flow.csv&quot;, append = T)
+  rm(comb_flow2)</code></pre>
+<p>This part may seem a little confusing. What’s going on here is I’m taking the newly acquired flow data and calling it comb_flow2. I call <code>rownames_to_column(“Index)</code> which converts the rowname to”Index". It then appends these values to the existing .csv. <br /></p>
+<pre class="r"><code>comb_flow &lt;- as.xts(read.csv.zoo(&quot;./data/comb_flow.csv&quot;))</code></pre>
+<p>Finally, the script reads in the comb_flow.csv but in order for it to be displayed properly with dygraphs, it must be in <strong>xts</strong> format. <br /></p>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

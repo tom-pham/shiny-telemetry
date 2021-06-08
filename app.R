@@ -14,7 +14,6 @@ library(suncalc) # getting sunset sunrise times
 library(arsenal) # nice summary stats tables
 library(gt) # fancy tables
 library(rerddap) # ERDDAP data retrievals
-library(waiter) # Loading animations
 library(httr) # Check HTTP status for CDEC/ERDDAP
 library(vroom) # Fastest way to read csv
 library(sf) # To display gis layers
@@ -42,7 +41,7 @@ last_checked_date <- read_rds("last_checked_date.RDS")
 ## Load ReceiverDeployments 
 # If last update check was < 90 days read in CSVs (much faster load times)
 if (as.numeric(Sys.Date() - last_checked_date) < 90) {
-  ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
+  ReceiverDeployments <- vroom("./data/rec_deployments.csv")
 } else { 
   # Else check if ERDDAP is online, x returns TRUE if database is down or "Timeout"
   # if the http check timeouts out 
@@ -51,7 +50,7 @@ if (as.numeric(Sys.Date() - last_checked_date) < 90) {
   
   # If the database isn't working then read csv
   if (x == TRUE | x == "Timeout") {
-    ReceiverDeployments <- vroom("./data/ReceiverDeployments.csv")
+    ReceiverDeployments <- vroom("./data/rec_deployments.csv")
   } else {
     # If database is working then check for updates
     
@@ -89,7 +88,7 @@ if (as.numeric(Sys.Date() - last_checked_date) < 90) {
       )
     
     # Save latest update to file
-    write_csv(ReceiverDeployments, "./data/ReceiverDeployments.csv")
+    write_csv(ReceiverDeployments, "./data/rec_deployments.csv")
     
     # Change the last saved date to today
     last_checked_date <- Sys.Date()
@@ -106,7 +105,7 @@ detections_studyid_list <- files <- unlist(strsplit(
   list.files("./data/detections"), ".csv"))
 
 
-TaggedFish <- vroom("./data/TaggedFish.csv")
+TaggedFish <- vroom("./data/tagged_fish.csv")
 
 
 # Update TaggedFish csv if there are new studyID files for detections/survival that 
@@ -124,14 +123,14 @@ if (any(!(detections_studyid_list %in% unique(TaggedFish$study_id)))) {
   
   closeAllConnections()
   # Save latest update to file
-  write_csv(TaggedFish, "./data/TaggedFish.csv")
+  write_csv(TaggedFish, "./data/tagged_fish.csv")
 }
 
-TaggedFish <- vroom("./data/TaggedFish.csv")
+TaggedFish <- vroom("./data/tagged_fish.csv")
 
 
 # This must be manually updated
-VemcoReceiverDeployments <- vroom("./data/VemcoReceiverDeployments.csv") %>%
+VemcoReceiverDeployments <- vroom("./data/vemco_rec_deployments.csv") %>%
   left_join(ReceiverDeployments %>% 
               select(GPSname, GEN, GenLat, GenLon) %>% 
               distinct()) %>%
@@ -215,7 +214,6 @@ cdec_stations <- vroom("./data/cdec_stations.csv")
 ##%######################################################%##
 
 ui <- fluidPage(theme = shinytheme("flatly"),
-                use_waitress(),
                 navbarPage("Central Valley Enhanced Acoustic Tagging Project",
                            tabPanel("Background", 
                                     mainPanel(
@@ -395,6 +393,9 @@ ui <- fluidPage(theme = shinytheme("flatly"),
                                       selectInput(
                                         "movement_dataset", "Choose a study population",
                                         choices = studyid_list
+                                      ),
+                                      uiOutput(
+                                        "movement_second_select"
                                       )
                                     ),
                                     mainPanel(
@@ -415,8 +416,7 @@ ui <- fluidPage(theme = shinytheme("flatly"),
 
 server <- function(input, output, session) {
   
-  waitress <- Waitress$new("#background", infinite = T, hide_on_render = T)
-  
+
 ##%######################################################%##
 #                                                          #
 ####                    Background                      ####
@@ -424,7 +424,6 @@ server <- function(input, output, session) {
 ##%######################################################%##
   
   output$background <- renderUI({
-    waitress$start(h3("Loading..."))
     withTags({
       div(class="header", checked=NA,
           h1("Background"),
@@ -1890,6 +1889,20 @@ server <- function(input, output, session) {
 ####                      Movement                      ####
 #                                                          #
 ##%######################################################%##
+  
+  # This is used to get the release locations for the selected studyid
+  movement_rel_locs <- reactive({
+    req(input$movement_dataset)
+    
+    studyid <- input$movement_dataset
+
+    TaggedFish %>% 
+      filter(study_id == studyid) %>% 
+      select(release_location) %>% 
+      distinct() %>% 
+      pull(release_location)
+    
+  })
 
   # Takes user selected studyIDs and retrieves data from ERDDAP
   movementVar <-  reactive({
@@ -1912,14 +1925,16 @@ server <- function(input, output, session) {
     df <- df %>% 
       left_join(
         TaggedFish %>% 
-          select(FishID = fish_id, fish_release_date, release_river_km),
+          select(FishID = fish_id, fish_release_date, release_location,
+                 release_river_km),
         by = "FishID"
       ) %>% 
       mutate(fish_release_date = mdy_hm(fish_release_date))
     
     # Calculate time from release to receiver and dist to receiver
     min_detects <- df %>% 
-      group_by(FishID, GEN, GenRKM, fish_release_date, release_river_km) %>% 
+      group_by(release_location, FishID, GEN, GenRKM, fish_release_date, 
+               release_river_km) %>% 
       summarize(
         min_time = min(time_pst)
       ) %>% 
@@ -1933,7 +1948,7 @@ server <- function(input, output, session) {
              abs(km_day) < 200)
     
     speeds <- min_detects %>% 
-      group_by(GEN, GenRKM) %>% 
+      group_by(release_location, GEN, GenRKM) %>% 
       summarize(
         N = n(),
         min_travel_days = min(days_since_rel),
@@ -1949,11 +1964,30 @@ server <- function(input, output, session) {
     
   })
   
+  
+  output$movement_second_select <- renderUI({
+    
+    # Create the input selection for release location if there are multi release
+    if (length(movement_rel_locs()) > 1 ) {
+      selectInput("movement_rel_select", "Select Release Location", 
+                  choices = movement_rel_locs())
+    }
+  })
+  
   output$movement_gt <- render_gt({
     
     df <- movementVar()
     
-    gt_tbl <- gt(data = df, rowname_col = "GEN")
+    # If > 1 rel loc, filter data by selected rel loc
+    if (length(movement_rel_locs()) > 1 ) {
+
+       df <- df %>% 
+        filter(release_location == input$movement_rel_select)
+    }
+
+    
+    gt_tbl <- gt(data = df %>% 
+                   select(-release_location), rowname_col = "GEN")
     
     gt_tbl %>% 
       tab_header(
@@ -1964,7 +1998,7 @@ server <- function(input, output, session) {
       tab_stubhead(label = "General Receiver Location") %>% 
       fmt_number(
         decimals = 1,
-        columns = vars(min_travel_days, median_travel_days, max_travel_days,
+        columns = c(min_travel_days, median_travel_days, max_travel_days,
                        mean_km_day, median_km_day)
       ) %>% 
       cols_label(
@@ -1976,11 +2010,11 @@ server <- function(input, output, session) {
       ) %>% 
       tab_spanner(
         label = "Time (days)",
-        columns = vars(min_travel_days, median_travel_days, max_travel_days)
+        columns = c(min_travel_days, median_travel_days, max_travel_days)
       ) %>%
       tab_spanner(
         label = "Travel rate (km/day)",
-        columns = vars(mean_km_day, median_km_day)
+        columns = c(mean_km_day, median_km_day)
       )
   })  
 }

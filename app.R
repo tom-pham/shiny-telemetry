@@ -1929,7 +1929,13 @@ server <- function(input, output, session) {
                  release_river_km),
         by = "FishID"
       ) %>% 
-      mutate(fish_release_date = mdy_hm(fish_release_date))
+      mutate(fish_release_date = mdy_hm(fish_release_date)) %>% 
+      # Remove any detections above the release RKM
+      filter(GenRKM <= release_river_km) %>% 
+      # If dataset has multi release filter for the selected one otherwise
+      # leave it untouched https://stackoverflow.com/a/49411556
+      filter(if(length(movement_rel_locs()) > 1 )  
+        (release_location == input$movement_rel_select) else TRUE)
     
     # Calculate time from release to receiver and dist to receiver
     min_detects <- df %>% 

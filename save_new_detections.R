@@ -24,16 +24,8 @@ ReceiverDeployments <- tabledap(JSATSinfo, url = my_url)
 my_url <- "https://oceanview.pfeg.noaa.gov/erddap/"
 JSATSinfo <- info('FED_JSATS_detects', url = my_url)
 
-files <- list.files("./data/Survival/Cumulative Survival/", full.names = F)
-files <- unlist(sapply(files, strsplit, "_cum_survival.csv"))
-
-file_detects <- list.files("./data/detections/", full.names = F)
-file_detects <- unlist(sapply(file_detects, strsplit, ".csv"))
-
-
-missing <- setdiff(files, file_detects)
-
-for (studyID in missing) {
+# Function to download the studyID in the proper format for Shiny
+download_detections <- function(studyID) {
   
   # Retrieve detection data from ERDDAP
   #
@@ -98,4 +90,12 @@ for (studyID in missing) {
   write_csv(df, paste0('./data/detections/', studyID, ".csv"))
   
 }
+
+# Provide the studyID name you want to download here
+studyID <- ""
+
+# Call the download function and provide the studyID you want and it will
+# retrieve the data from ERDDAP and save it to csv in the detections folder
+download_detections(studyID)
+
 
